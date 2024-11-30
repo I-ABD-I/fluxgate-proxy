@@ -1,0 +1,22 @@
+services:
+    heavy-app-0:
+        container_name: heavy-app-0
+        build:
+            context: ./heavy-app
+        ports:
+            - 3001:3001
+        environment:
+            - NODE_ENV=production
+            - PORT=3001
+        command: node index.js
+
+    heavy-app-1:
+        container_name: heavy-app-1
+        build:
+            context: ./heavy-app
+        ports:
+            - 3000:3001
+        environment:
+            - NODE_ENV=production
+            - PORT=3001
+        command: node index.js

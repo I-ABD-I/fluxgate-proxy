@@ -1,0 +1,23 @@
+services:
+    clicker-app:
+        container_name: clicker-app
+        build:
+            context: ./clicker-app
+        ports:
+            - 3000:3000
+        environment:
+            - NODE_ENV=production
+            - PORT=3000
+            - HOST=0.0.0.0
+        command: node server.js
+
+    heavy-app:
+        container_name: heavy-app
+        build:
+            context: ./heavy-app
+        ports:
+            - 3001:3001
+        environment:
+            - NODE_ENV=production
+            - PORT=3001
+        command: node index.js
