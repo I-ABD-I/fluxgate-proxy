@@ -1,0 +1,6 @@
+[submodule "clicker-app"]
+	path = clicker-app
+	url = ../clicker-app
+[submodule "heavy-app"]
+	path = heavy-app
+	url = ../heavy-app
