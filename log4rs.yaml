@@ -1,0 +1,28 @@
+refresh_rate: 30 seconds # Optional: Automatically reload config if the file changes
+
+appenders:
+    console:
+        kind: console
+        encoder:
+            pattern: "{d(%Y-%m-%d %H:%M:%S)} {h({l})} [{h({t})}] {m}{n}"
+
+    file:
+        kind: file
+        path: "logs/fluxgate.log"
+        encoder:
+            pattern: "{d(%Y-%m-%d %H:%M:%S)} {l} [{t}] {m}{n}"
+
+root:
+    level: info
+    appenders:
+        - console
+        - file
+
+loggers:
+    # Adjust logging levels for specific modules
+    app::proxy:
+        level: debug
+        appenders:
+            - console
+            - file
+        additive: false # Don't inherit appenders from the root
