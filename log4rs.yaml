@@ -20,7 +20,7 @@ root:
 
 loggers:
     # Adjust logging levels for specific modules
-    app::proxy:
+    fluxgate:
         level: debug
         appenders:
             - console
