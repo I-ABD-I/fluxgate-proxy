@@ -54,3 +54,26 @@ where
         }
     }
 }
+
+#[derive(Clone, Copy)]
+pub struct ServiceFn<T> {
+    f: T,
+}
+impl<T> ServiceFn<T> {
+    pub const fn new(f: T) -> Self {
+        Self { f }
+    }
+}
+
+impl<T, Request, R, E> Service<Request> for ServiceFn<T>
+where
+    T: FnMut(Request) -> Result<R, E>,
+{
+    type Response = R;
+
+    type Error = E;
+
+    fn call(&mut self, req: Request) -> Result<Self::Response, Self::Error> {
+        (self.f)(req)
+    }
+}

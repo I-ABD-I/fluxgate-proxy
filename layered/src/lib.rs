@@ -1,4 +1,6 @@
-use util::{Either, Identity, Stack};
+use layer::Layer;
+
+use util::{Either, Identity, ServiceFn, Stack};
 
 pub mod layer;
 pub mod service;
@@ -38,5 +40,19 @@ impl<L> ServiceBuilder<L> {
         ServiceBuilder {
             inner: Stack::new(inner, self.inner),
         }
+    }
+
+    pub fn service<S>(&self, service: S) -> L::Service
+    where
+        L: Layer<S>,
+    {
+        self.inner.layer(service)
+    }
+
+    pub fn service_fn<F>(&self, f: F) -> L::Service
+    where
+        L: Layer<ServiceFn<F>>,
+    {
+        self.inner.layer(ServiceFn::new(f))
     }
 }

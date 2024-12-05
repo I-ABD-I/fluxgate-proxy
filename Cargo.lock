@@ -219,6 +219,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "layered",
  "log",
  "log4rs",
  "ron",
@@ -315,6 +316,10 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "layered"
+version = "0.1.0"
 
 [[package]]
 name = "libc"
