@@ -18,8 +18,8 @@ fn main() -> anyhow::Result<()> {
     log4rs::init_file("log4rs.yaml", Default::default())?;
     let cli = Cli::parse();
 
-    let cfg =
-        ron::from_str::<Vec<config::Server>>(&fs::read_to_string(&cli.config).unwrap()).unwrap();
+    // panics, cannot run without proper config
+    let cfg = ron::from_str::<Vec<config::Server>>(&fs::read_to_string(&cli.config)?)?;
 
     debug!("Loaded CLI config {cli:#?}");
     debug!("Loaded config file {}, {cfg:#?}", cli.config.display());
