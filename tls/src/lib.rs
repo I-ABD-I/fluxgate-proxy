@@ -1,2 +1,4 @@
 pub(crate) mod codec;
-mod message;
+pub(crate) mod error;
+pub(crate) mod message;
+pub(crate) mod verify;

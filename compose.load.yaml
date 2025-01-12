@@ -1,6 +1,6 @@
 services:
     heavy-app-0:
-        container_name: heavy-app-0
+        container_name: heavy-app
         build:
             context: ./heavy-app
         ports:

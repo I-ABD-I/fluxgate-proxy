@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! enum_builder {
     (
         $(#[doc = $comment:literal])*
@@ -8,10 +9,23 @@ macro_rules! enum_builder {
         }
     ) => {
         $(#[doc = $comment])*
-        #[derive(PartialEq, Eq, Clone, Copy)]
+        #[derive(PartialEq, Eq, Clone, Copy, Debug)]
         $enum_vis enum $enum_name {
             $( $enum_var ),*
             ,Unknown($uint)
+        }
+
+        impl Codec<'_> for $enum_name {
+            fn encode(&self, bytes: &mut Vec<u8>) {
+                <$uint>::from(*self).encode(bytes);
+            }
+
+            fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+                match <$uint>::read(r) {
+                    Ok(x) => Ok($enum_name::from(x)),
+                    Err(_) => Err(crate::error::InvalidMessage::MissingData(stringify!($enum_name))),
+                }
+            }
         }
 
         impl From<$uint> for $enum_name {
