@@ -1,10 +1,11 @@
 mod config;
 mod controller;
 
-use std::{fs, path::PathBuf};
+use std::{fs, io::Read, net::TcpListener, path::PathBuf};
 
 use clap::Parser;
 use log::debug;
+use tls::server::Connection;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -23,6 +24,14 @@ fn main() -> anyhow::Result<()> {
 
     debug!("Loaded CLI config {cli:#?}");
     debug!("Loaded config file {}, {cfg:#?}", cli.config.display());
+
+    let listener = TcpListener::bind("127.0.0.1:4000").unwrap();
+
+    for socket in listener.incoming() {
+        let mut stream = tls::stream::StreamOwned::new(Connection::new(), socket.unwrap());
+        let mut buf = [0u8; 2048];
+        stream.read(&mut buf).unwrap();
+    }
 
     Ok(())
 }

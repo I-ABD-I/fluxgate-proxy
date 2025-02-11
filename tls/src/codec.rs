@@ -132,6 +132,54 @@ impl<'a> Codec<'a> for u64 {
     }
 }
 
+pub(crate) struct LengthPrefixedBuffer<'a> {
+    pub(crate) buf: &'a mut Vec<u8>,
+    size_len: ListLength,
+    len_offset: usize,
+}
+
+impl<'a> LengthPrefixedBuffer<'a> {
+    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
+        let offset = buf.len();
+        buf.extend(match size_len {
+            ListLength::u8 => &[0xff][..],
+            ListLength::u16 => &[0xff, 0xff],
+            ListLength::u24 { .. } => &[0xff, 0xff, 0xff],
+        });
+
+        Self {
+            buf,
+            size_len,
+            len_offset: offset,
+        }
+    }
+}
+
+impl Drop for LengthPrefixedBuffer<'_> {
+    fn drop(&mut self) {
+        match self.size_len {
+            ListLength::u8 => {
+                let length = (self.buf.len() - self.len_offset - 1) as u8;
+                debug_assert!(length <= u8::MAX);
+                self.buf[self.len_offset] = length;
+            }
+
+            ListLength::u16 => {
+                let length = (self.buf.len() - self.len_offset - 2) as u16;
+                debug_assert!(length <= u16::MAX);
+                self.buf[self.len_offset..=self.len_offset + 1]
+                    .copy_from_slice(&length.to_be_bytes());
+            }
+            ListLength::u24 { max, error: _ } => {
+                let length = (self.buf.len() - self.len_offset - 3) as u32;
+                debug_assert!(length <= max as u32);
+                self.buf[self.len_offset..=self.len_offset + 2]
+                    .copy_from_slice(&length.to_be_bytes()[1..]);
+            }
+        }
+    }
+}
+
 #[allow(non_camel_case_types)]
 pub enum ListLength {
     u8,
@@ -148,36 +196,10 @@ where
 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         // length is the byte slice length and not the vec length
-        let dummy_length = match T::LENGHT_SIZE {
-            ListLength::u8 => &[0xff][..],
-            ListLength::u16 => &[0xff, 0xff],
-            ListLength::u24 { .. } => &[0xff, 0xff, 0xff],
-        };
-        let length_offset = bytes.len();
 
-        bytes.extend_from_slice(dummy_length);
+        let nest = LengthPrefixedBuffer::new(T::LENGHT_SIZE, bytes);
         for i in self {
-            i.encode(bytes);
-        }
-
-        match T::LENGHT_SIZE {
-            ListLength::u8 => {
-                let length = (bytes.len() - length_offset - 1) as u8;
-                debug_assert!(length <= u8::MAX);
-                bytes[length_offset] = length;
-            }
-
-            ListLength::u16 => {
-                let length = (bytes.len() - length_offset - 2) as u16;
-                debug_assert!(length <= u16::MAX);
-                bytes[length_offset..=length_offset + 1].copy_from_slice(&length.to_be_bytes());
-            }
-            ListLength::u24 { max, error: _ } => {
-                let length = (bytes.len() - length_offset - 3) as u32;
-                debug_assert!(length <= max as u32);
-                bytes[length_offset..=length_offset + 2]
-                    .copy_from_slice(&length.to_be_bytes()[1..]);
-            }
+            i.encode(nest.buf);
         }
     }
 

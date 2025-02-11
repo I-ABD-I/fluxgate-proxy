@@ -2,6 +2,7 @@ use core::slice;
 
 use crate::codec::{self, Codec, Reader, TLSListElement};
 
+#[derive(Debug)]
 pub enum Payload<'a> {
     Borrowed(&'a [u8]),
     Owned(Vec<u8>),
@@ -22,7 +23,7 @@ impl<'a> Codec<'a> for Payload<'a> {
 }
 
 impl<'a> Payload<'a> {
-    fn read(r: &mut Reader<'a>) -> Self {
+    pub fn read(r: &mut Reader<'a>) -> Self {
         Self::Borrowed(r.rest())
     }
 
