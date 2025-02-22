@@ -1,4 +1,6 @@
 use std::fmt::Debug;
+use crate::crypto::kx::ActiveKx;
+use crate::error::Error;
 
 pub trait AeadAlgorithm: Sync + Debug {
     fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
@@ -56,4 +58,15 @@ impl AeadAlgorithm for GCMAlgorithm {
     fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
         todo!()
     }
+}
+
+pub trait Prf : Debug {
+    fn for_key_exchange(
+        &self,
+        output: &mut [u8; 32],
+        kx: Box<dyn ActiveKx>,
+        peer_pub: &[u8],
+        label: &[u8],
+        seed: &[u8],
+    ) -> Result<(), Error>;
 }

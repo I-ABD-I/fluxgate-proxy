@@ -18,6 +18,7 @@ mod ccs;
 pub(crate) mod enums;
 pub(crate) mod hs;
 pub(crate) mod inbound;
+pub(crate) mod deframer;
 
 pub enum MessagePayload<'a> {
     ChangeCipherSpec(ChangeCipherSpecPayload),
@@ -65,3 +66,5 @@ pub struct PlainMessage {
 
 const MAX_PAYLOAD: u16 = 0x4800;
 const HEADER_SIZE: usize = 1 + 2 + 2;
+
+const MAX_WIRE_SIZE: usize = MAX_PAYLOAD as usize + HEADER_SIZE;

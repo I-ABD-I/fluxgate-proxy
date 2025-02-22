@@ -14,6 +14,7 @@ use crate::{
     },
     state::{self, Context, State},
 };
+use crate::message::deframer::VecDeframerBuffer;
 
 // don't need version, only supporting 1.2
 pub struct TlsState {
@@ -23,6 +24,7 @@ pub struct TlsState {
     pub(crate) recived_plaintext: Vec<u8>,
     has_recived_close: bool,
     pub(crate) kx_state: KxState,
+    has_seen_eof: bool
 }
 
 pub(crate) enum KxState {
@@ -39,6 +41,7 @@ impl TlsState {
             recived_plaintext: Vec::new(),
             has_recived_close: false,
             kx_state: KxState::None,
+            has_seen_eof: false,
         }
     }
 
@@ -113,7 +116,7 @@ impl ConnectionCore {
 
     fn process_new_packets(
         &mut self,
-        deframer: &mut Vec<u8>,
+        deframer: &mut VecDeframerBuffer,
         sendable_plaintext: &mut Vec<u8>,
     ) -> Result<(), Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotCompleate)) {
@@ -126,7 +129,7 @@ impl ConnectionCore {
 
         let mut progress = 0;
         loop {
-            let res = self.deframe(&mut deframer[progress..]);
+            let res = self.deframe(deframer.filled_mut());
 
             let msg_opt = match res {
                 Ok(opt) => opt,
@@ -206,7 +209,7 @@ impl DerefMut for ConnectionCore {
 
 pub struct Connection {
     core: ConnectionCore,
-    deframer_buffer: Vec<u8>,
+    deframer_buffer: VecDeframerBuffer,
     sendable_plaintext: Vec<u8>,
 }
 
@@ -228,7 +231,7 @@ impl Connection {
     pub fn new() -> Self {
         Self {
             core: ConnectionCore::new(Box::new(state::ExpectClientHello::new()), TlsState::new()),
-            deframer_buffer: Vec::new(),
+            deframer_buffer: VecDeframerBuffer::new(),
             sendable_plaintext: Vec::new(),
         }
     }
@@ -244,17 +247,12 @@ impl Connection {
             false => READ_SIZE,
         };
 
-        if self.deframer_buffer.len() >= allowed_max {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "msg buffer full",
-            ));
+
+        let res  = self.deframer_buffer.read(r, self.is_handshaking());
+        if let Ok(0) = res {
+            self.has_seen_eof = true;
         }
-
-        let need_cap = Ord::min(allowed_max, self.deframer_buffer.len() + READ_SIZE);
-        self.deframer_buffer.resize(need_cap, 0);
-
-        r.read(&mut self.deframer_buffer)
+        res
     }
 
     pub(crate) fn compleate_io<T: io::Read + io::Write>(

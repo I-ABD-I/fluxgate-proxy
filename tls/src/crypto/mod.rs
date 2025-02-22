@@ -11,6 +11,7 @@ use crate::message;
 use cipher::AeadAlgorithm;
 use hash::Hash;
 use std::sync::Arc;
+use crate::crypto::cipher::Prf;
 
 pub trait SecureRandom {
     fn fill(&self, dest: &mut [u8]) -> Result<(), GetRandomFailed>;
@@ -26,6 +27,7 @@ pub struct CipherSuite {
     pub kx: kx::KeyExchangeAlgorithm,
     pub sign: &'static [SignatureAndHashAlgorithm],
     pub aead_algo: &'static dyn AeadAlgorithm,
+    pub prf_provider: &'static dyn Prf,
 }
 
 impl CipherSuite {

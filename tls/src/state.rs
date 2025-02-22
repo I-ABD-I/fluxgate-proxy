@@ -1,15 +1,12 @@
-use crate::codec::Codec;
+use crate::codec::{Codec, Reader};
 use crate::config::CertifiedKey;
-use crate::crypto::kx::SupportedKxGroup;
+use crate::crypto::kx::{ActiveKx, SupportedKxGroup};
 use crate::crypto::provider::SupportedCipherSuite;
 use crate::hs_hash::HandshakeHash;
 use crate::message::enums::{
     CompressionMethod, ECPointFormat, NamedCurve, ProtocolVersion, SignatureAlgorithm,
 };
-use crate::message::hs::{
-    CertificateChain, ClientHelloPayload, Random, ServerHelloPayload, SessionID,
-    SignatureAndHashAlgorithm,
-};
+use crate::message::hs::{CertificateChain, ClientECDHParams, ClientHelloPayload, Random, ServerECDHParams, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangePayload, SessionID, SignatureAndHashAlgorithm};
 use crate::{
     config::ServerConfig,
     connection::TlsState,
@@ -22,6 +19,8 @@ use crate::{
 use log::debug;
 use rustls_pki_types::{CertificateDer, DnsName};
 use std::sync::Arc;
+use crate::crypto::sign::SigningKey;
+use crate::verify::DigitalySinged;
 
 pub struct Context<'a> {
     pub(crate) state: &'a mut TlsState,
@@ -56,7 +55,6 @@ impl ExpectClientHello {
                 .kx_groups
                 .iter()
                 .find(|x| x.group() == *group);
-
             supported_groups.push(supported);
         }
 
@@ -86,7 +84,7 @@ impl ExpectClientHello {
         Ok((*suite, *skxg))
     }
 }
-
+//#region
 pub struct ClientHello<'a> {
     server_name: &'a Option<DnsName<'a>>,
     sigschemes: &'a [SignatureAndHashAlgorithm],
@@ -136,29 +134,33 @@ impl State for ExpectClientHello {
             .unwrap();
 
         let starting_hash = suite.0.hash_provider;
-        let mut hshash = hs_hash::HandshakeHash::start_hash(starting_hash);
+        let mut hshash = HandshakeHash::start_hash(starting_hash);
         hshash.add_message(&message);
 
-        let crandom = client_hello.random;
-        let srandom = Random::new(self.config.provider.random)?;
+        let client_random = client_hello.random;
+        let server_random = Random::new(self.config.provider.random)?;
 
         FinishCHHandling {
             config: self.config.clone(),
             transcript: hshash,
             suite: &suite.0,
-            client_random: crandom,
-            server_random: srandom,
+            randoms: ConnectionRandoms {
+                client_random, server_random
+            }
         }
         .handle(cx, &certkey, client_hello, kxg, sig)
     }
 }
 
+struct ConnectionRandoms {
+    client_random: Random,
+    server_random: Random,
+}
 struct FinishCHHandling {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static crypto::CipherSuite,
-    client_random: Random,
-    server_random: Random,
+    randoms: ConnectionRandoms,
 }
 
 struct HandshakeFlight<'a> {
@@ -197,6 +199,36 @@ fn emit_certificate(flight: &mut HandshakeFlight, cert: &[CertificateDer<'_>]) {
     )));
 }
 
+fn emit_server_kx(
+    flight: &mut HandshakeFlight,
+    sigschemes: Vec<SignatureAndHashAlgorithm>,
+    selected_kxg: &'static dyn SupportedKxGroup,
+    signing_key: &dyn SigningKey,
+    randoms: &ConnectionRandoms) -> Result<Box<dyn ActiveKx>, Error> {
+    let kx = selected_kxg.start()?;
+    let kx_params = ServerECDHParams::new(&*kx);
+
+    let mut msg = Vec::new();
+    msg.extend(randoms.client_random.as_ref());
+    msg.extend(randoms.server_random.as_ref());
+    kx_params.encode(&mut msg);
+
+    let signer = signing_key.choose_scheme(&sigschemes).ok_or_else(|| {
+        Error::General("incompatible signing key")
+    })?;
+    let sigscheme = signer.scheme();
+    let sig = signer.sign(&msg)?;
+
+    let skx = ServerKeyExchangePayload::from(ServerKeyExchange {
+        params: kx_params,
+        dss: DigitalySinged::new(sigscheme, sig),
+    });
+
+    flight.add(
+        &HandshakePayload::ServerKeyExchange(skx),
+    );
+    Ok(kx)
+}
 fn emit_server_hello_done(flight: &mut HandshakeFlight) {
     flight.add(&HandshakePayload::ServerHelloDone);
 }
@@ -227,20 +259,87 @@ impl FinishCHHandling {
 
         emit_server_hello(
             &mut flight,
-            self.server_random,
+            self.randoms.server_random,
             self.suite,
             client_hello.session,
         );
         emit_certificate(&mut flight, &server_key.cert);
+        let kx= emit_server_kx(&mut flight,sigschemes, selected_kxg, &*server_key.key, &self.randoms)?;
         emit_server_hello_done(&mut flight);
-        Ok(Box::new(ExpectClientKx))
+        Ok(Box::new(ExpectClientKx {
+            config: self.config,
+            kx_group: selected_kxg,
+            transcript: self.transcript,
+            randoms: self.randoms,
+            server_key: kx
+        }))
+    }
+}
+//#endregion
+pub struct ExpectClientKx {
+    config: Arc<ServerConfig>,
+    kx_group: &'static dyn SupportedKxGroup,
+    transcript: HandshakeHash,
+    randoms: ConnectionRandoms,
+    server_key: Box<dyn ActiveKx>,
+}
+
+struct ConnectionSecrets {
+    randoms: ConnectionRandoms,
+    suite: &'static crypto::CipherSuite,
+    master_secret: [u8; 32],
+}
+
+impl ConnectionSecrets {
+    fn from_key_exchange(
+        kx: Box<dyn ActiveKx>,
+        peer_pub: &[u8],
+        randoms: ConnectionRandoms,
+        suite: &'static crypto::CipherSuite,
+    ) -> Result<Self, Error> {
+        let mut ret = Self {
+            randoms,
+            suite,
+            master_secret: [0; 32],
+        };
+
+        let seed = {
+            let mut seed = [0u8; 64];
+            seed[..32].copy_from_slice(ret.randoms.client_random.as_ref());
+            seed[32..].copy_from_slice(ret.randoms.server_random.as_ref());
+            seed
+        };
+
+        ret.suite.prf_provider.for_key_exchange(
+            &mut ret.master_secret,
+            kx,
+            peer_pub,
+            "master secret".as_bytes(),
+            &seed,
+        );
+
+        Ok(ret)
     }
 }
 
-pub struct ExpectClientKx;
-
 impl State for ExpectClientKx {
     fn handle<'m>(&self, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error> {
-        todo!()
+        let MessagePayload::HandshakePayload(HandshakePayload::ClientKeyExchange(client_kx)) =
+            &message.payload
+        else {
+            return Err(Error::InappropriateHandshakeMessage);
+        };
+
+        let mut r = Reader::new(client_kx.bytes());
+        let client_kx_params = ClientECDHParams::read(&mut r)?;
+
+        let secrets = ConnectionSecrets::from_key_exchange(
+            self.server_key,
+            client_kx_params.payload.0,
+            self.randoms,
+            self.kx_group
+        );
+
+        todo!();
     }
 }

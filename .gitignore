@@ -22,3 +22,7 @@ Cargo.lock
 
 # logs
 logs
+
+# Cerfificates
+**/**.crt
+**/**.pem

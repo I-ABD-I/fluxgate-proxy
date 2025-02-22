@@ -8,6 +8,11 @@ pub struct DigitalySinged {
     signature: PayloadU16,
 }
 
+impl DigitalySinged {
+    pub fn new(algo: SignatureAndHashAlgorithm, signature: Vec<u8>) -> Self {
+        Self { algo, signature: PayloadU16::new(signature) }
+    }
+}
 impl Codec<'_> for DigitalySinged {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.algo.encode(bytes);

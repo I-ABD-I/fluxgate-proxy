@@ -11,6 +11,7 @@ pub enum InvalidMessage {
     MessageTooLarge,
     InvalidContentType,
     UnknownProtocolVersion,
+    UnsupportedCurve,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

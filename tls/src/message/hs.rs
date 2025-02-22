@@ -6,13 +6,15 @@ use crate::codec::LengthPrefixedBuffer;
 use crate::codec::ListLength;
 use crate::codec::Reader;
 use crate::codec::TLSListElement;
+use crate::connection::TlsState;
+use crate::crypto::kx::{ActiveKx, KeyExchangeAlgorithm};
 use crate::crypto::SecureRandom;
 use crate::error::{GetRandomFailed, InvalidMessage};
 use crate::verify::DigitalySinged;
 
-use super::base::Payload;
+use super::base::{Payload, PayloadU8};
 use super::base::PayloadU16;
-use super::enums::ExtensionType;
+use super::enums::{ECCurveType, ExtensionType};
 use super::enums::HashAlgorithm;
 use super::enums::ProtocolVersion;
 use super::enums::SignatureAlgorithm;
@@ -137,6 +139,12 @@ impl Codec<'_> for Random {
         let mut opaque = [0; 32];
         opaque.clone_from_slice(bytes);
         Ok(Self(opaque))
+    }
+}
+
+impl AsRef<[u8]> for Random {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -414,30 +422,47 @@ impl<'a> Codec<'a> for CertificateChain<'a> {
 }
 
 pub const MAX_CERTIFICATE_SIZE_LIMIT: usize = 65536;
-pub struct ServerDHParams {
-    dh_p: PayloadU16,
-    dh_g: PayloadU16,
-    dh_ys: PayloadU16,
+pub struct ServerECDHParams {
+    curve_type: ECCurveType,
+    named_group: NamedCurve,
+    public: PayloadU8,
 }
 
-impl Codec<'_> for ServerDHParams {
+impl ServerECDHParams {
+    pub(crate) fn new(kx: &dyn ActiveKx) -> Self {
+        Self {
+            curve_type: ECCurveType::NamedCurve,
+            named_group: kx.group(),
+            public: PayloadU8::new(kx.pub_key().to_vec())
+        }
+    }
+}
+
+impl Codec<'_> for ServerECDHParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.dh_g.encode(bytes);
-        self.dh_g.encode(bytes);
-        self.dh_ys.encode(bytes);
+        self.curve_type.encode(bytes);
+        self.named_group.encode(bytes);
+        self.public.encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let dh_p = PayloadU16::read(r)?;
-        let dh_g = PayloadU16::read(r)?;
-        let dh_ys = PayloadU16::read(r)?;
-        Ok(Self { dh_p, dh_g, dh_ys })
+        let ct = ECCurveType::read(r)?;
+        if ct != ECCurveType::NamedCurve {
+            return Err(InvalidMessage::UnsupportedCurve);
+        }
+        let grp = NamedCurve::read(r)?;
+
+        Ok(Self{
+            curve_type: ct,
+            named_group: grp,
+            public: PayloadU8::read(r)?,
+        })
     }
 }
 
 pub struct ServerKeyExchange {
-    params: ServerDHParams,
-    dss: DigitalySinged,
+    pub(crate) params: ServerECDHParams,
+    pub(crate) dss: DigitalySinged,
 }
 
 impl ServerKeyExchange {
@@ -470,5 +495,22 @@ impl Codec<'_> for ServerKeyExchangePayload {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self::Unknown(Payload::read(r).into_owned()))
+    }
+}
+
+// fn decode_kx_params(kx_algo: KeyExchangeAlgorithm, state: &mut TlsState, kx_params: &[u8]) ->
+pub(crate) struct ClientECDHParams {
+    pub payload: PayloadU8,
+}
+
+impl Codec<'_> for ClientECDHParams {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.payload.encode(bytes)
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            payload: PayloadU8::read(r)?,
+        })
     }
 }

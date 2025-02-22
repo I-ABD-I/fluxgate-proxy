@@ -177,3 +177,15 @@ enum_builder! {
 impl ECPointFormat {
     pub(crate) const SUPPORTED: [Self; 1] = [Self::Uncompressed];
 }
+
+enum_builder! {
+    /// The `ECCurveType` TLS protocol enum.  Values in this enum are taken
+    /// from the various RFCs covering TLS, and are listed by IANA.
+    /// The `Unknown` item is used when processing unrecognised ordinals.
+    #[repr(u8)]
+    pub(crate) enum ECCurveType {
+        ExplicitPrime => 0x01,
+        ExplicitChar2 => 0x02,
+        NamedCurve => 0x03,
+    }
+}

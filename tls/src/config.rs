@@ -32,7 +32,7 @@ impl ServerConfig {
             .unwrap()
             .map(|cert| cert.unwrap())
             .collect();
-        let key = PrivateKeyDer::from_pem_file("private-key.pem").unwrap();
+        let key = PrivateKeyDer::from_pem_file("key.pem").unwrap();
 
         debug!("Loaded key {:?}", key);
         let key = crypto::sign::any_supported_type(&key).unwrap();
