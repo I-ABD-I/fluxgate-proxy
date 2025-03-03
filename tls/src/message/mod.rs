@@ -14,16 +14,21 @@ mod macros;
 
 mod alert;
 pub(crate) mod base;
-mod ccs;
+pub(crate) mod ccs;
 pub(crate) mod enums;
 pub(crate) mod hs;
 pub(crate) mod inbound;
 pub(crate) mod deframer;
+pub(crate) mod outbound;
+pub(crate) mod fragmenter;
 
+#[derive(Debug)]
 pub enum MessagePayload<'a> {
     ChangeCipherSpec(ChangeCipherSpecPayload),
     Alert(AlertPayload),
     HandshakePayload(HandshakePayload<'a>),
+    HandshakeFlight(Payload<'a>),
+    ApplicationData(Payload<'a>),
 }
 
 impl<'a> MessagePayload<'a> {
@@ -34,6 +39,8 @@ impl<'a> MessagePayload<'a> {
             }
             MessagePayload::Alert(alert_payload) => alert_payload.encode(bytes),
             MessagePayload::HandshakePayload(handshake_payload) => handshake_payload.encode(bytes),
+            MessagePayload::HandshakeFlight(payload) => bytes.extend(payload.bytes()),
+            MessagePayload::ApplicationData(payload) => bytes.extend(payload.bytes())
         }
     }
 
@@ -47,15 +54,41 @@ impl<'a> MessagePayload<'a> {
             ContentType::Handshake => {
                 HandshakePayload::read(&mut r).map(MessagePayload::HandshakePayload)
             }
-            ContentType::ApplicationData => todo!(),
+            ContentType::ApplicationData => Ok(MessagePayload::ApplicationData(Payload::read(&mut r))),
             ContentType::Unknown(_) => todo!(),
+        }
+    }
+
+    pub fn content_type(&self) -> ContentType {
+        match self {
+            MessagePayload::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
+            MessagePayload::Alert(_) => ContentType::Alert,
+            MessagePayload::HandshakePayload(_) | MessagePayload::HandshakeFlight(_) => ContentType::Handshake,
+            MessagePayload::ApplicationData(_) => ContentType::ApplicationData,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Message<'a> {
-    version: ProtocolVersion,
+    pub(crate) version: ProtocolVersion,
     pub(crate) payload: MessagePayload<'a>,
+}
+
+impl From<Message<'_>> for PlainMessage {
+    fn from(value: Message<'_>) -> Self {
+        let payload = {
+            let mut buf = Vec::new();
+            value.payload.encode(&mut buf);
+            Payload::Owned(buf)
+        };
+        
+        Self {
+            typ: value.payload.content_type(),
+            version: value.version,
+            payload
+        }
+    }
 }
 
 pub struct PlainMessage {

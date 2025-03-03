@@ -1,5 +1,6 @@
 use crate::{codec::Codec, error::InvalidMessage};
 
+#[derive(Debug)]
 pub struct ChangeCipherSpecPayload;
 
 impl Codec<'_> for ChangeCipherSpecPayload {

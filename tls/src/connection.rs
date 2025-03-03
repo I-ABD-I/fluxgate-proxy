@@ -15,6 +15,11 @@ use crate::{
     state::{self, Context, State},
 };
 use crate::message::deframer::VecDeframerBuffer;
+use crate::message::fragmenter::MessageFragmenter;
+use crate::message::outbound::{OutboundOpaqueMessage, OutboundPlainMessage};
+use crate::message::PlainMessage;
+use crate::record_layer::RecordLayer;
+use crate::state::ConnectionSecrets;
 
 // don't need version, only supporting 1.2
 pub struct TlsState {
@@ -24,13 +29,23 @@ pub struct TlsState {
     pub(crate) recived_plaintext: Vec<u8>,
     has_recived_close: bool,
     pub(crate) kx_state: KxState,
-    has_seen_eof: bool
+    has_seen_eof: bool,
+    pub(crate) record_layer: RecordLayer,
+    fragmenter: MessageFragmenter
 }
 
 pub(crate) enum KxState {
     None,
     Start(&'static dyn SupportedKxGroup),
     Done(&'static dyn SupportedKxGroup),
+}
+
+impl KxState {
+    pub(crate) fn done(&mut self) {
+        if let Self::Start(group) = self {
+            *self = Self::Done(*group);
+        }
+    }
 }
 impl TlsState {
     fn new() -> Self {
@@ -42,6 +57,8 @@ impl TlsState {
             has_recived_close: false,
             kx_state: KxState::None,
             has_seen_eof: false,
+            record_layer: RecordLayer::new(),
+            fragmenter: MessageFragmenter,
         }
     }
 
@@ -88,7 +105,7 @@ impl TlsState {
         let mut cx = Context { state: self };
         match state.handle(&mut cx, message) {
             Ok(state) => return Ok(state),
-            Err(_) => todo!(),
+            Err(e) => todo!("{e:?}"),
         }
     }
     pub fn send_warning(&self, discription: u8) -> Error {
@@ -97,6 +114,34 @@ impl TlsState {
 
     pub fn send_fatal(&self, description: u8) -> Error {
         todo!()
+    }
+
+    pub(crate) fn start_encryption(&mut self, secrets: &ConnectionSecrets) {
+        let (dec, enc) = secrets.make_cipher_pair() ;
+        self.record_layer.prepare_encrypter(enc);
+        self.record_layer.prepare_decrypter(dec);
+    }
+
+    fn queue_tls_message(&mut self, msg: OutboundOpaqueMessage) {
+        self.sendable_tls.append(&mut msg.encode())
+    }
+
+    pub fn send_message(&mut self, msg: Message<'_>, must_encrypt: bool) {
+        if !must_encrypt {
+            self.fragmenter.fragment_message(&msg.into()).for_each(
+                |fragment| self.queue_tls_message(fragment.to_unencrypted_opaque())
+            );
+            return
+        }
+
+        self.fragmenter.fragment_message(&msg.into()).for_each(
+            |fragment| self.send_single_fragment(fragment)
+        );
+    }
+
+    fn send_single_fragment(&mut self, m: OutboundPlainMessage<'_>) {
+        let em = self.record_layer.encrypt(m);
+        self.queue_tls_message(em);
     }
 }
 
@@ -127,7 +172,6 @@ impl ConnectionCore {
             }
         };
 
-        let mut progress = 0;
         loop {
             let res = self.deframe(deframer.filled_mut());
 
@@ -139,17 +183,23 @@ impl ConnectionCore {
             let Some((msg, size)) = msg_opt else {
                 break;
             };
-            progress += size;
+
 
             match self.process_msg(msg, state, sendable_plaintext) {
                 Ok(s) => state = s,
                 Err(_) => todo!(),
             }
+
+            if self.has_recived_close {
+                deframer.discard(deframer.filled().len());
+                break;
+            }
+
+            deframer.discard(size);
         }
 
         self.state = Ok(state);
-
-        todo!()
+        Ok(())
     }
 
     fn deframe<'b>(
@@ -166,7 +216,10 @@ impl ConnectionCore {
         };
 
         let allowed_plaintext = match message.typ {
-            ContentType::Handshake | ContentType::ChangeCipherSpec => true,
+            // CCS is always plaintext
+            ContentType::ChangeCipherSpec => true,
+            // Handshake Finished Message should not be plaintext!!
+            ContentType::Handshake => !self.record_layer.should_decrypt(),
             ContentType::Alert => is_handshaking,
             _ => false,
         };
@@ -175,7 +228,13 @@ impl ConnectionCore {
             return Ok(Some((message.into(), iter.consumed())));
         }
 
-        todo!();
+        let message = match self.record_layer.decrypt(message) {
+            Ok(message) => message,
+            Err(e) => todo!("handle decryption error {:?}", e),
+        };
+        
+
+        Ok(Some((message, iter.consumed())))
     }
 
     fn process_msg(
@@ -186,11 +245,13 @@ impl ConnectionCore {
     ) -> Result<Box<dyn State>, Error> {
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
-            Err(_) => todo!(),
+            Err(e) => todo!("{:?}", e),
         };
 
         self.process_main_protocol(msg, state, sendable_plaintext)
     }
+
+
 }
 
 impl Deref for ConnectionCore {

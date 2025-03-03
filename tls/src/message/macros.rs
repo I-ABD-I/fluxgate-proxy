@@ -14,6 +14,12 @@ macro_rules! enum_builder {
             $( $enum_var ),*
             ,Unknown($uint)
         }
+        
+        impl $enum_name {
+            $enum_vis fn to_array(self) -> [u8; core::mem::size_of::<$uint>()] {
+                <$uint>::from(self).to_be_bytes()
+            }
+        }
 
         impl Codec<'_> for $enum_name {
             fn encode(&self, bytes: &mut Vec<u8>) {

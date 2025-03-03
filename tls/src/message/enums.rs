@@ -85,6 +85,7 @@ enum_builder! {
         TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA => 0xC017,
         TLS_ECDH_anon_WITH_AES_128_CBC_SHA => 0xC018,
         TLS_ECDH_anon_WITH_AES_256_CBC_SHA => 0xC019,
+        TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
     }
 }
 
@@ -102,6 +103,7 @@ enum_builder! {
         SignatureAlgorithm => 13,
         EllipticCurves => 10,
         ECPointFormats => 11,
+        RenegotationInfo => 0xff01,
     }
 }
 

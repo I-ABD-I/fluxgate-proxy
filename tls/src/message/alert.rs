@@ -41,6 +41,7 @@ enum_builder! {
     }
 }
 
+#[derive(Debug)]
 pub struct AlertPayload {
     level: AlertLevel,
     description: AlertDescription,

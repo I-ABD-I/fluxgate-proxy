@@ -1,5 +1,6 @@
 use crate::codec::Codec;
 use crate::crypto::hash;
+use crate::crypto::hash::Output;
 use crate::message::{Message, MessagePayload};
 
 pub struct HandshakeHash {
@@ -26,5 +27,9 @@ impl HandshakeHash {
     fn add_raw(&mut self, data: &[u8]) -> &mut Self {
         self.ctx.update(data);
         self
+    }
+
+    pub(crate) fn current_hash(&self) -> Output {
+        self.ctx.fork_finish()
     }
 }

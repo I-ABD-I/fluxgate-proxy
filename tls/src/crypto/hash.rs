@@ -25,9 +25,17 @@ impl Output {
     const MAX_SIZE: usize = 64; // max is 64 bytes for sha512
 }
 
+impl AsRef<[u8]> for Output {
+    fn as_ref(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
+}
+
 pub trait Context {
     fn finish(self: Box<Self>) -> Output;
     fn update(&mut self, data: &[u8]);
+
+    fn fork_finish(&self) -> Output;
 }
 
 impl Context for ring::digest::Context {
@@ -39,7 +47,12 @@ impl Context for ring::digest::Context {
     fn update(&mut self, data: &[u8]) {
         ring::digest::Context::update(self, data);
     }
+
+    fn fork_finish(&self) -> Output {
+        Output::new(self.clone().finish().as_ref())
+    }
 }
+
 
 #[derive(Debug)]
 pub(crate) struct SHA(&'static ring::digest::Algorithm, HashAlgorithm);

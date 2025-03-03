@@ -1,4 +1,7 @@
 use core::fmt;
+use log::warn;
+use crate::message::enums::ContentType;
+use crate::message::MessagePayload;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InvalidMessage {
@@ -14,13 +17,17 @@ pub enum InvalidMessage {
     UnsupportedCurve,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     HandshakeNotCompleate,
     InvalidMessage(InvalidMessage),
     InappropriateHandshakeMessage,
     FailedToGetRandom,
     General(&'static str),
+    EncryptError,
+    DecryptError,
+    PeerSendOversizedRecord,
+    InappropriateMessage { expect_types: Vec<ContentType>, got_type: ContentType },
 }
 
 impl fmt::Display for Error {
@@ -30,8 +37,11 @@ impl fmt::Display for Error {
             Error::InvalidMessage(_) => write!(f, "invalid message"),
             Error::InappropriateHandshakeMessage => write!(f, "inaproptiate handshake message"),
             Error::FailedToGetRandom => write!(f, "failed to get random"),
-
             Error::General(s) => f.write_str(s),
+            Error::EncryptError => write!(f, "failed to encrypt"),
+            Error::DecryptError => write!(f, "failed to decrypt"),
+            Error::PeerSendOversizedRecord => write!(f, "peer send oversized record"),
+            Error::InappropriateMessage { .. } => write!(f, "inappropriate message"),
         }
     }
 }
@@ -59,5 +69,20 @@ pub struct GetRandomFailed;
 impl From<GetRandomFailed> for Error {
     fn from(value: GetRandomFailed) -> Self {
         Self::FailedToGetRandom
+    }
+}
+
+pub(crate) fn inappropriate_message(
+    payload: &MessagePayload<'_>,
+    content_types: &[ContentType],
+) -> Error {
+    warn!(
+        "Received a {:?} message while expecting {:?}",
+        payload.content_type(),
+        content_types
+    );
+    Error::InappropriateMessage {
+        expect_types: content_types.to_vec(),
+        got_type: payload.content_type(),
     }
 }

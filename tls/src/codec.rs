@@ -223,6 +223,15 @@ where
     }
 }
 
+pub fn put_u64(v: u64, slice: &mut [u8]) {
+    let mut bytes: &mut [u8; 8] = (&mut slice[..8]).try_into().unwrap();
+    *bytes = v.to_be_bytes();
+}
+pub(crate) fn put_u16(v: u16, out: &mut [u8]) {
+    let out: &mut [u8; 2] = (&mut out[..2]).try_into().unwrap();
+    *out = u16::to_be_bytes(v);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::enum_builder;

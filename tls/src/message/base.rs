@@ -39,7 +39,7 @@ impl<'a> Payload<'a> {
     }
     
     pub(crate) fn bytes(&self) -> &[u8] {
-        match Self {
+        match self {
             Payload::Borrowed(slice) => slice,
             Payload::Owned(vec) => vec.as_slice(),
         }
@@ -47,11 +47,12 @@ impl<'a> Payload<'a> {
 }
 
 impl Payload<'static> {
-    fn new(bytes: impl Into<Vec<u8>>) -> Self {
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
         Self::Owned(bytes.into())
     }
 }
 
+#[derive(Debug)]
 pub struct PayloadU8(pub Vec<u8>);
 
 impl PayloadU8 {
@@ -86,6 +87,7 @@ impl Codec<'_> for PayloadU8 {
     }
 }
 
+#[derive(Debug)]
 pub struct PayloadU16(pub Vec<u8>);
 
 impl PayloadU16 {

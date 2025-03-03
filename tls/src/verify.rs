@@ -3,6 +3,7 @@ use crate::{
     message::{base::PayloadU16, hs::SignatureAndHashAlgorithm},
 };
 
+#[derive(Debug)]
 pub struct DigitalySinged {
     algo: SignatureAndHashAlgorithm,
     signature: PayloadU16,

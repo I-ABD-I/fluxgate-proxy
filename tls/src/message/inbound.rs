@@ -1,5 +1,5 @@
 use std::mem;
-
+use std::ops::{Deref, DerefMut};
 use crate::{
     codec::{Codec, Reader},
     error::{Error, InvalidMessage, MessageError},
@@ -10,12 +10,43 @@ use super::{
     Message, MessagePayload, HEADER_SIZE, MAX_PAYLOAD,
 };
 
-struct BorrowedPayload<'a>(&'a mut [u8]);
+pub struct BorrowedPayload<'a>(&'a mut [u8]);
+impl BorrowedPayload<'_> {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn truncate(&mut self, len: usize) {
+        if len >= self.len() {
+            return;
+        }
+
+        self.0 = core::mem::take(&mut self.0)
+            .split_at_mut(len)
+            .0;
+    }
+
+}
+
+
+impl Deref for BorrowedPayload<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+
+impl DerefMut for BorrowedPayload<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
 
 pub struct InboundOpaqueMessage<'a> {
     pub(crate) typ: ContentType,
     pub(crate) version: ProtocolVersion,
-    payload: BorrowedPayload<'a>,
+    pub(crate) payload: BorrowedPayload<'a>,
 }
 
 pub struct DeframerIter<'a> {

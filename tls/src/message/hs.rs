@@ -37,6 +37,7 @@ enum_builder! {
     }
 }
 
+#[derive(Debug)]
 pub enum HandshakePayload<'a> {
     HelloRequest,
     ClientHello(ClientHelloPayload),
@@ -68,17 +69,21 @@ impl HandshakePayload<'_> {
 impl<'a> Codec<'a> for HandshakePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.typ().encode(bytes);
+
+        let mut nested = LengthPrefixedBuffer::new(
+            ListLength::u24 {max: usize::MAX, error: InvalidMessage::MessageTooLarge}, bytes
+        );
         match self {
             HandshakePayload::HelloRequest => {}
-            HandshakePayload::ClientHello(client_hello) => client_hello.encode(bytes),
-            HandshakePayload::ServerHello(server_hello) => server_hello.encode(bytes),
-            HandshakePayload::Certificate(certificate_chain) => certificate_chain.encode(bytes),
-            HandshakePayload::ServerKeyExchange(kx) => kx.encode(bytes),
+            HandshakePayload::ClientHello(client_hello) => client_hello.encode(nested.buf),
+            HandshakePayload::ServerHello(server_hello) => server_hello.encode(nested.buf),
+            HandshakePayload::Certificate(certificate_chain) => certificate_chain.encode(nested.buf),
+            HandshakePayload::ServerKeyExchange(kx) => kx.encode(nested.buf),
             HandshakePayload::ServerHelloDone => {}
-            HandshakePayload::ClientKeyExchange(payload) => payload.encode(bytes),
-            HandshakePayload::CertificateVerify(digitaly_singed) => digitaly_singed.encode(bytes),
-            HandshakePayload::Finished(payload) => payload.encode(bytes),
-            HandshakePayload::Unknown(payload) => payload.encode(bytes),
+            HandshakePayload::ClientKeyExchange(payload) => payload.encode(nested.buf),
+            HandshakePayload::CertificateVerify(digitaly_singed) => digitaly_singed.encode(nested.buf),
+            HandshakePayload::Finished(payload) => payload.encode(nested.buf),
+            HandshakePayload::Unknown(payload) => payload.encode(nested.buf),
         }
     }
 
@@ -116,7 +121,7 @@ impl<'a> Codec<'a> for HandshakePayload<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Random([u8; 32]);
 
 impl Random {
@@ -148,7 +153,7 @@ impl AsRef<[u8]> for Random {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct SessionID {
     length: usize,
     data: [u8; 32],
@@ -158,7 +163,7 @@ impl Codec<'_> for SessionID {
     fn encode(&self, bytes: &mut Vec<u8>) {
         debug_assert!(self.length <= 32);
         bytes.push(self.length as u8);
-        bytes.extend_from_slice(&self.data);
+        bytes.extend_from_slice(&self.data[..self.length]);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
@@ -271,13 +276,32 @@ impl Codec<'_> for ClientExtension {
 #[derive(Debug)]
 
 pub enum ServerExtension {
+    RenegotiationInfo(PayloadU8),
     Unknown(UnknownExtension),
+}
+
+impl ServerExtension {
+    fn ext_typ(&self) -> ExtensionType {
+        match self {
+            ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotationInfo,
+            ServerExtension::Unknown(ext) => ext.typ,
+        }
+    }
+
+    pub(crate) fn make_empty_reneg_info() -> Self {
+        Self::RenegotiationInfo(PayloadU8::new_empty())
+    }
 }
 
 impl Codec<'_> for ServerExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        self.ext_typ().encode(bytes);
+
+        let mut nested = LengthPrefixedBuffer::new(ListLength::u16, bytes);
+
         match self {
-            ServerExtension::Unknown(unknown_extension) => unknown_extension.encode(bytes),
+            ServerExtension::RenegotiationInfo(r) => r.encode(nested.buf),
+            ServerExtension::Unknown(unknown_extension) => unknown_extension.encode(nested.buf),
         }
     }
 
@@ -302,6 +326,7 @@ impl TLSListElement for ServerExtension {
     const LENGHT_SIZE: ListLength = ListLength::u16;
 }
 
+#[derive(Debug)]
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
@@ -365,6 +390,7 @@ impl Codec<'_> for ClientHelloPayload {
     }
 }
 
+#[derive(Debug)]
 pub struct ServerHelloPayload {
     pub(crate) server_version: ProtocolVersion,
     pub(crate) random: Random,
@@ -389,6 +415,7 @@ impl Codec<'_> for ServerHelloPayload {
     }
 }
 
+#[derive(Debug)]
 pub struct CertificateChain<'a>(pub Vec<CertificateDer<'a>>);
 
 impl TLSListElement for CertificateDer<'_> {
@@ -401,6 +428,7 @@ impl TLSListElement for CertificateDer<'_> {
 impl<'a> Codec<'a> for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         u24(self.as_ref().len() as u32).encode(bytes);
+        bytes.extend(self.as_ref());
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
@@ -422,6 +450,7 @@ impl<'a> Codec<'a> for CertificateChain<'a> {
 }
 
 pub const MAX_CERTIFICATE_SIZE_LIMIT: usize = 65536;
+#[derive(Debug)]
 pub struct ServerECDHParams {
     curve_type: ECCurveType,
     named_group: NamedCurve,
@@ -460,6 +489,7 @@ impl Codec<'_> for ServerECDHParams {
     }
 }
 
+#[derive(Debug)]
 pub struct ServerKeyExchange {
     pub(crate) params: ServerECDHParams,
     pub(crate) dss: DigitalySinged,
@@ -472,6 +502,7 @@ impl ServerKeyExchange {
     }
 }
 
+#[derive(Debug)]
 pub enum ServerKeyExchangePayload {
     Known(ServerKeyExchange),
     Unknown(Payload<'static>),

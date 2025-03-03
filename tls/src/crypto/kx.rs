@@ -53,6 +53,7 @@ pub static X25519: KxGroup = KxGroup {
 
 
 pub trait ActiveKx {
+    fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<Vec<u8>, Error>;
     fn group(&self) -> NamedCurve;
     fn pub_key(&self) -> &[u8];
 }
@@ -67,6 +68,11 @@ struct KeyExchange {
 }
 
 impl ActiveKx for KeyExchange {
+    fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<Vec<u8>, Error> {
+        let peer_key = ring::agreement::UnparsedPublicKey::new(self.agreement_algorithm, &peer_pub_key);
+        ring::agreement::agree_ephemeral(self.priv_key, &peer_key, |slice| slice.to_vec()).map_err(|_| GetRandomFailed.into())
+    }
+
     fn group(&self) -> NamedCurve {
         self.group
     }

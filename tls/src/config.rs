@@ -34,7 +34,6 @@ impl ServerConfig {
             .collect();
         let key = PrivateKeyDer::from_pem_file("key.pem").unwrap();
 
-        debug!("Loaded key {:?}", key);
         let key = crypto::sign::any_supported_type(&key).unwrap();
 
         Self {

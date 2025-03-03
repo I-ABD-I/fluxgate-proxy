@@ -1,8 +1,9 @@
-mod cipher;
+pub mod cipher;
 pub mod hash;
 pub mod kx;
 pub mod provider;
 pub mod sign;
+pub mod hmac;
 
 use self::message::{enums::SignatureAlgorithm, hs::SignatureAndHashAlgorithm};
 use crate::crypto::provider::SupportedCipherSuite;
