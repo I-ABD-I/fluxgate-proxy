@@ -1,0 +1,47 @@
+{
+    "configurations": [
+        
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "cargo test -p tls --all-targets",
+            "cwd": "${workspaceFolder}/tls",
+            "program": "${workspaceFolder}/target/debug/deps/tls-f4d0a4fa534051f2",
+            "env": {
+                "RUST_BACKTRACE": "short",
+                "RUSTC_TOOLCHAIN": "/home/aylon/.rustup/toolchains/stable-x86_64-unknown-linux-gnu"
+            },
+            "args": [],
+            "sourceMap": {},
+            "sourceLanguages": [
+                "rust"
+            ]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "cargo run -p fluxgate",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/target/debug/fluxgate",
+            "env": {
+                "RUST_BACKTRACE": "short",
+                "RUSTC_TOOLCHAIN": "/home/aylon/.rustup/toolchains/stable-x86_64-unknown-linux-gnu"
+            },
+            "args": [],
+            "sourceMap": {},
+            "sourceLanguages": [
+                "rust"
+            ]
+            
+        },
+        {
+            "type": "by-gdb",
+            "request": "launch",
+            "name": "Launch(gdb)",
+            "program": "${workspaceFolder}/target/debug/fluxgate",
+            "cwd": "${workspaceRoot}",
+            "debuggerPath": "rust-gdb"
+        }
+
+    ]
+}

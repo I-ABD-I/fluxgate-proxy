@@ -1,4 +1,4 @@
-workspace = { members = ["layered"] }
+workspace = { members = ["layered", "tls"] }
 [package]
 name = "fluxgate"
 version = "0.1.0"
@@ -15,3 +15,4 @@ ron = "0.8.1"
 serde = { version = "1.0.215", features = ["derive"] }
 thiserror = "2.0.4"
 layered = { path = "./layered/" }
+tls = { path = "./tls/" }
