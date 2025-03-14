@@ -53,11 +53,10 @@ impl Context for ring::digest::Context {
     }
 }
 
-
 #[derive(Debug)]
-pub(crate) struct SHA(&'static ring::digest::Algorithm, HashAlgorithm);
+pub(crate) struct Sha(&'static ring::digest::Algorithm, HashAlgorithm);
 
-impl Hash for SHA {
+impl Hash for Sha {
     fn start(&self) -> Box<dyn Context> {
         Box::new(ring::digest::Context::new(self.0))
     }
@@ -77,4 +76,4 @@ impl Hash for SHA {
     }
 }
 
-pub(crate) static SHA256: SHA = SHA(&ring::digest::SHA256, HashAlgorithm::sha256);
+pub(crate) static SHA256: Sha = Sha(&ring::digest::SHA256, HashAlgorithm::sha256);

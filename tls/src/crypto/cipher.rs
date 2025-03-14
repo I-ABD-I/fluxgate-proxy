@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-use ring::aead::NONCE_LEN;
 use crate::codec;
 use crate::crypto::kx::ActiveKx;
 use crate::error::Error;
@@ -7,6 +5,8 @@ use crate::message::enums::{ContentType, ProtocolVersion};
 use crate::message::fragmenter::MAX_FRAGMENT_LENGTH;
 use crate::message::inbound::{InboundOpaqueMessage, InboundPlainMessage};
 use crate::message::outbound::{OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
+use ring::aead::NONCE_LEN;
+use std::fmt::Debug;
 
 pub trait AeadAlgorithm: Sync + Debug {
     fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
@@ -15,12 +15,20 @@ pub trait AeadAlgorithm: Sync + Debug {
 }
 
 pub trait MessageEncrypter {
-    fn encrypt(&self, msg: OutboundPlainMessage<'_>, seq: u64) -> Result<OutboundOpaqueMessage, Error>;
+    fn encrypt(
+        &self,
+        msg: OutboundPlainMessage<'_>,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error>;
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
 pub trait MessageDecrypter {
-    fn decrypt<'a>(&self, msg: InboundOpaqueMessage<'a>, seq: u64) -> Result<InboundPlainMessage<'a>, Error>;
+    fn decrypt<'a>(
+        &self,
+        msg: InboundOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<InboundPlainMessage<'a>, Error>;
 }
 
 pub struct Nonce(pub [u8; NONCE_LEN]);
@@ -34,13 +42,9 @@ impl Nonce {
         let mut nonce = Self([0u8; NONCE_LEN]);
         codec::put_u64(seq, &mut nonce.0[4..]);
 
-        nonce
-            .0
-            .iter_mut()
-            .zip(iv.iter())
-            .for_each(|(nonce, iv)| {
-                *nonce ^= *iv;
-            });
+        nonce.0.iter_mut().zip(iv.iter()).for_each(|(nonce, iv)| {
+            *nonce ^= *iv;
+        });
 
         nonce
     }
@@ -48,7 +52,11 @@ impl Nonce {
 pub(crate) struct Invalid;
 
 impl MessageEncrypter for Invalid {
-    fn encrypt(&self, msg: OutboundPlainMessage<'_>, seq: u64) -> Result<OutboundOpaqueMessage, Error> {
+    fn encrypt(
+        &self,
+        msg: OutboundPlainMessage<'_>,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error> {
         Err(Error::EncryptError)
     }
 
@@ -58,7 +66,11 @@ impl MessageEncrypter for Invalid {
 }
 
 impl MessageDecrypter for Invalid {
-    fn decrypt<'a>(&self, msg: InboundOpaqueMessage<'a>, seq: u64) -> Result<InboundPlainMessage<'a>, Error> {
+    fn decrypt<'a>(
+        &self,
+        msg: InboundOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         Err(Error::DecryptError)
     }
 }
@@ -120,10 +132,7 @@ impl AeadAlgorithm for GCMAlgorithm {
             iv
         };
 
-        Box::new(GcmEncrypter {
-            enc_key,
-            iv,
-        })
+        Box::new(GcmEncrypter { enc_key, iv })
     }
 
     fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
@@ -132,7 +141,8 @@ impl AeadAlgorithm for GCMAlgorithm {
         );
 
         let mut ret = GcmDecrypter {
-            dec_key, salt: [0; 4],
+            dec_key,
+            salt: [0; 4],
         };
 
         ret.salt.copy_from_slice(iv);
@@ -156,7 +166,11 @@ struct GcmDecrypter {
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 impl MessageDecrypter for GcmDecrypter {
-    fn decrypt<'a>(&self, mut msg: InboundOpaqueMessage<'a>, seq: u64) -> Result<InboundPlainMessage<'a>, Error> {
+    fn decrypt<'a>(
+        &self,
+        mut msg: InboundOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -169,36 +183,47 @@ impl MessageDecrypter for GcmDecrypter {
             ring::aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let aad = ring::aead::Aad::from(
-            make_tls12_aad(seq, msg.typ, msg.version, payload.len() - GCM_OVERHEAD)
-        );
+        let aad = ring::aead::Aad::from(make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version,
+            payload.len() - GCM_OVERHEAD,
+        ));
 
         let payload = &mut msg.payload;
-        let plain_len = self.dec_key.
-            open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..).
-            map_err(|_| {Error::DecryptError})?.len();
+        let plain_len = self
+            .dec_key
+            .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
+            .map_err(|_| Error::DecryptError)?
+            .len();
 
-        if plain_len > MAX_FRAGMENT_LENGTH {return Err(Error::PeerSendOversizedRecord);}
+        if plain_len > MAX_FRAGMENT_LENGTH {
+            return Err(Error::PeerSendOversizedRecord);
+        }
         payload.truncate(plain_len);
         Ok(msg.into())
     }
-
 }
 
 impl MessageEncrypter for GcmEncrypter {
-    fn encrypt(&self, msg: OutboundPlainMessage<'_>, seq: u64) -> Result<OutboundOpaqueMessage, Error> {
-        let total_len =self.encrypted_payload_len(msg.payload.len());
+    fn encrypt(
+        &self,
+        msg: OutboundPlainMessage<'_>,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error> {
+        let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
         let nonce = ring::aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
-        let aad = ring::aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
+        let aad =
+            ring::aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
         payload.extend(&nonce.as_ref()[4..]);
-        payload.extend(&msg.payload);
+        payload.extend(msg.payload);
 
-        self.enc_key.
-            seal_in_place_separate_tag(nonce, aad, &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..]).
-            map(|tag| payload.extend(tag.as_ref())).
-            map_err(|_| Error::EncryptError)?;
+        self.enc_key
+            .seal_in_place_separate_tag(nonce, aad, &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..])
+            .map(|tag| payload.extend(tag.as_ref()))
+            .map_err(|_| Error::EncryptError)?;
 
         Ok(OutboundOpaqueMessage {
             typ: msg.typ,
@@ -207,14 +232,16 @@ impl MessageEncrypter for GcmEncrypter {
         })
     }
 
-
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
         payload_len + GCM_EXPLICIT_NONCE_LEN + self.enc_key.algorithm().tag_len()
     }
 }
 
 fn make_tls12_aad(
-    seq: u64, typ: ContentType, version: ProtocolVersion, len: usize
+    seq: u64,
+    typ: ContentType,
+    version: ProtocolVersion,
+    len: usize,
 ) -> [u8; TLS12_AAD_SIZE] {
     let mut out = [0u8; TLS12_AAD_SIZE];
     codec::put_u64(seq, &mut out[0..]);
@@ -224,8 +251,8 @@ fn make_tls12_aad(
     out
 }
 
-const TLS12_AAD_SIZE: usize = 8+1+2+2;
-pub trait Prf : Debug + Sync {
+const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
+pub trait Prf: Debug + Sync {
     fn for_key_exchange(
         &self,
         output: &mut [u8; 48],

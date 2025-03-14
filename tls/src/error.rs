@@ -1,7 +1,9 @@
-use core::fmt;
-use log::warn;
+use crate::message::alert::{AlertDescription, AlertPayload};
 use crate::message::enums::ContentType;
 use crate::message::MessagePayload;
+use core::fmt;
+use log::warn;
+use std::fmt::write;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InvalidMessage {
@@ -24,10 +26,16 @@ pub enum Error {
     InappropriateHandshakeMessage,
     FailedToGetRandom,
     General(&'static str),
+    #[allow(clippy::enum_variant_names)]
     EncryptError,
+    #[allow(clippy::enum_variant_names)]
     DecryptError,
     PeerSendOversizedRecord,
-    InappropriateMessage { expect_types: Vec<ContentType>, got_type: ContentType },
+    InappropriateMessage {
+        expect_types: Vec<ContentType>,
+        got_type: ContentType,
+    },
+    AlertReceived(AlertDescription),
 }
 
 impl fmt::Display for Error {
@@ -42,6 +50,7 @@ impl fmt::Display for Error {
             Error::DecryptError => write!(f, "failed to decrypt"),
             Error::PeerSendOversizedRecord => write!(f, "peer send oversized record"),
             Error::InappropriateMessage { .. } => write!(f, "inappropriate message"),
+            Error::AlertReceived(alert) => write!(f, "received alert {alert:?}"),
         }
     }
 }

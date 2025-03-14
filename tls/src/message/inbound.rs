@@ -1,9 +1,9 @@
-use std::mem;
-use std::ops::{Deref, DerefMut};
 use crate::{
     codec::{Codec, Reader},
     error::{Error, InvalidMessage, MessageError},
 };
+use std::mem;
+use std::ops::{Deref, DerefMut};
 
 use super::{
     enums::{ContentType, ProtocolVersion},
@@ -20,13 +20,9 @@ impl BorrowedPayload<'_> {
             return;
         }
 
-        self.0 = core::mem::take(&mut self.0)
-            .split_at_mut(len)
-            .0;
+        self.0 = core::mem::take(&mut self.0).split_at_mut(len).0;
     }
-
 }
-
 
 impl Deref for BorrowedPayload<'_> {
     type Target = [u8];
@@ -35,7 +31,6 @@ impl Deref for BorrowedPayload<'_> {
         self.0
     }
 }
-
 
 impl DerefMut for BorrowedPayload<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -97,24 +92,22 @@ impl<'a> Iterator for DeframerIter<'a> {
     type Item = Result<InboundOpaqueMessage<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (typ, version, length) =
-            match read_opaque_message_header(&mut Reader::new(&self.buffer)) {
-                Ok(header) => header,
-                Err(err) => {
-                    let err = match err {
-                        MessageError::TooShortForHeader | MessageError::TooShortForLength => {
-                            return None
-                        }
-                        MessageError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
-                        MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
-                        MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
-                        MessageError::UnknownProtocolVersion => {
-                            InvalidMessage::UnknownProtocolVersion
-                        }
-                    };
-                    return Some(Err(err.into()));
-                }
-            };
+        let (typ, version, length) = match read_opaque_message_header(&mut Reader::new(self.buffer))
+        {
+            Ok(header) => header,
+            Err(err) => {
+                let err = match err {
+                    MessageError::TooShortForHeader | MessageError::TooShortForLength => {
+                        return None
+                    }
+                    MessageError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
+                    MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
+                    MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
+                    MessageError::UnknownProtocolVersion => InvalidMessage::UnknownProtocolVersion,
+                };
+                return Some(Err(err.into()));
+            }
+        };
 
         let end = HEADER_SIZE + length;
 

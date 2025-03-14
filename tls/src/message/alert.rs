@@ -41,10 +41,10 @@ enum_builder! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AlertPayload {
-    level: AlertLevel,
-    description: AlertDescription,
+    pub(crate) level: AlertLevel,
+    pub(crate) description: AlertDescription,
 }
 
 impl Codec<'_> for AlertPayload {

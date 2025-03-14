@@ -1,14 +1,12 @@
+use crate::error::{Error, GetRandomFailed};
 use crate::message::enums::NamedCurve;
 use std::fmt::Debug;
-use crate::error::{Error, GetRandomFailed};
 
 pub trait SupportedKxGroup: Sync + Debug {
     fn start(&self) -> Result<Box<dyn ActiveKx>, Error>;
 
     fn group(&self) -> NamedCurve;
-
 }
-
 
 /// Describes supported key exchange mechanisms.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -31,14 +29,17 @@ pub struct KxGroup {
 impl SupportedKxGroup for KxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKx>, Error> {
         let rng = ring::rand::SystemRandom::new();
-        let priv_key = ring::agreement::EphemeralPrivateKey::generate(self.agreement_algorithm,&rng ).map_err(|_| GetRandomFailed)?;
+        let priv_key =
+            ring::agreement::EphemeralPrivateKey::generate(self.agreement_algorithm, &rng)
+                .map_err(|_| GetRandomFailed)?;
 
         let pub_key = priv_key.compute_public_key().map_err(|_| GetRandomFailed)?;
 
         Ok(Box::new(KeyExchange {
             group: self.group,
             agreement_algorithm: self.agreement_algorithm,
-            priv_key, pub_key
+            priv_key,
+            pub_key,
         }))
     }
     fn group(&self) -> NamedCurve {
@@ -51,14 +52,11 @@ pub static X25519: KxGroup = KxGroup {
     agreement_algorithm: &ring::agreement::X25519,
 };
 
-
 pub trait ActiveKx {
     fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<Vec<u8>, Error>;
     fn group(&self) -> NamedCurve;
     fn pub_key(&self) -> &[u8];
 }
-
-
 
 struct KeyExchange {
     group: NamedCurve,
@@ -69,8 +67,10 @@ struct KeyExchange {
 
 impl ActiveKx for KeyExchange {
     fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<Vec<u8>, Error> {
-        let peer_key = ring::agreement::UnparsedPublicKey::new(self.agreement_algorithm, &peer_pub_key);
-        ring::agreement::agree_ephemeral(self.priv_key, &peer_key, |slice| slice.to_vec()).map_err(|_| GetRandomFailed.into())
+        let peer_key =
+            ring::agreement::UnparsedPublicKey::new(self.agreement_algorithm, &peer_pub_key);
+        ring::agreement::agree_ephemeral(self.priv_key, &peer_key, |slice| slice.to_vec())
+            .map_err(|_| GetRandomFailed.into())
     }
 
     fn group(&self) -> NamedCurve {

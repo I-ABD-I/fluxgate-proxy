@@ -8,11 +8,13 @@ pub mod crypto;
 pub(crate) mod error;
 mod hs_hash;
 pub(crate) mod message;
+mod record_layer;
 pub mod state;
 pub mod stream;
 pub(crate) mod verify;
-mod record_layer;
 
 pub mod server {
-    pub use crate::connection::Connection;
+    use super::connection;
+
+    pub use connection::Connection;
 }

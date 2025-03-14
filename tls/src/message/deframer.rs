@@ -1,6 +1,6 @@
+use crate::message::MAX_WIRE_SIZE;
 use core::ops::Range;
 use std::io;
-use crate::message::MAX_WIRE_SIZE;
 
 pub struct VecDeframerBuffer {
     pub(super) buffer: Vec<u8>,
@@ -31,8 +31,7 @@ impl VecDeframerBuffer {
              * 0          ^ self.used
              */
 
-            self.buffer
-                .copy_within(taken..self.used, 0);
+            self.buffer.copy_within(taken..self.used, 0);
             self.used -= taken;
         } else if taken >= self.used {
             self.used = 0;
@@ -116,6 +115,4 @@ impl VecDeframerBuffer {
         self.used += len;
         Range { start, end }
     }
-
-
 }

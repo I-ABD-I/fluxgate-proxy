@@ -1,18 +1,16 @@
-use std::fmt::{Debug, Formatter};
-use crate::crypto::cipher::{Prf, AES128_GCM};
+use crate::crypto::cipher::AES128_GCM;
 use crate::crypto::hash::SHA256;
-use crate::crypto::kx::{ActiveKx, KeyExchangeAlgorithm, SupportedKxGroup, X25519};
+use crate::crypto::hmac::PrfUsingHmac;
+use crate::crypto::kx::{KeyExchangeAlgorithm, SupportedKxGroup, X25519};
 use crate::crypto::sign::SigningKey;
 use crate::crypto::SecureRandom;
 use crate::error::{Error, GetRandomFailed};
-use crate::message::enums::SignatureAlgorithm;
+use crate::message::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::message::hs::SignatureAndHashAlgorithm;
 use crate::{crypto, message};
+use ring::hkdf::KeyType;
+use std::fmt::Debug;
 use std::sync::Arc;
-use ring::error::Unspecified;
-use ring::hkdf;
-use ring::hkdf::{Algorithm, KeyType, Okm, Prk, HKDF_SHA256};
-use crate::crypto::hmac::PrfUsingHmac;
 
 #[derive(Copy, Clone, Debug)]
 pub struct SupportedCipherSuite(pub(crate) &'static crypto::CipherSuite);
@@ -50,10 +48,7 @@ impl crypto::KeyProvider for Ring {
     }
 }
 
-pub static RSA_SCHEMES: &[SignatureAndHashAlgorithm] = &[SignatureAndHashAlgorithm {
-    hash: message::enums::HashAlgorithm::sha256,
-    signature: SignatureAlgorithm::rsa,
-}];
+pub static RSA_SCHEMES: &[SignatureScheme] = &[SignatureScheme::RSA_PSS_SHA512];
 
 static DEFAULT_CIPHER_SUITES: &[crypto::SupportedCipherSuite] =
     &[SupportedCipherSuite(&crypto::CipherSuite {
@@ -65,7 +60,6 @@ static DEFAULT_CIPHER_SUITES: &[crypto::SupportedCipherSuite] =
         prf_provider: &PrfUsingHmac(&Hmac(ring::hmac::HMAC_SHA256)),
     })];
 
-
 #[derive(Debug)]
 struct Hmac(ring::hmac::Algorithm);
 
@@ -73,26 +67,19 @@ impl crypto::hmac::Hmac for Hmac {
     fn with_key(&self, key: &[u8]) -> Box<dyn crypto::hmac::Key> {
         Box::new(Key(ring::hmac::Key::new(self.0, key)))
     }
-
-
 }
 
 struct Key(ring::hmac::Key);
 impl crypto::hmac::Key for Key {
     fn sign(&self, data: &[&[u8]]) -> crypto::hmac::Tag {
         let mut cx = ring::hmac::Context::with_key(&self.0);
-        data.iter().for_each(
-            |slice| cx.update(slice)
-        );
+        data.iter().for_each(|slice| cx.update(slice));
         crypto::hmac::Tag::new(cx.sign().as_ref())
     }
 
     fn tag_len(&self) -> usize {
         self.0.algorithm().len()
     }
-    
 }
 
 static DEFAULT_KX_GROUPS: &[&'static dyn SupportedKxGroup] = &[&X25519];
-
-

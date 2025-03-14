@@ -1,4 +1,4 @@
-use rustls_pki_types::CertificateDer;
+use rustls_pki_types::{CertificateDer, DnsName};
 
 use crate::codec::u24;
 use crate::codec::Codec;
@@ -6,20 +6,19 @@ use crate::codec::LengthPrefixedBuffer;
 use crate::codec::ListLength;
 use crate::codec::Reader;
 use crate::codec::TLSListElement;
-use crate::connection::TlsState;
-use crate::crypto::kx::{ActiveKx, KeyExchangeAlgorithm};
+use crate::crypto::kx::ActiveKx;
 use crate::crypto::SecureRandom;
 use crate::error::{GetRandomFailed, InvalidMessage};
 use crate::verify::DigitalySinged;
 
-use super::base::{Payload, PayloadU8};
 use super::base::PayloadU16;
-use super::enums::{ECCurveType, ExtensionType};
-use super::enums::HashAlgorithm;
+use super::base::{Payload, PayloadU8};
 use super::enums::ProtocolVersion;
 use super::enums::SignatureAlgorithm;
 use super::enums::{CipherSuite, NamedCurve};
 use super::enums::{CompressionMethod, ECPointFormat};
+use super::enums::{ECCurveType, ExtensionType, ServerNameType};
+use super::enums::{HashAlgorithm, SignatureScheme};
 
 enum_builder! {
     #[repr(u8)]
@@ -71,17 +70,25 @@ impl<'a> Codec<'a> for HandshakePayload<'a> {
         self.typ().encode(bytes);
 
         let mut nested = LengthPrefixedBuffer::new(
-            ListLength::u24 {max: usize::MAX, error: InvalidMessage::MessageTooLarge}, bytes
+            ListLength::u24 {
+                max: usize::MAX,
+                error: InvalidMessage::MessageTooLarge,
+            },
+            bytes,
         );
         match self {
             HandshakePayload::HelloRequest => {}
             HandshakePayload::ClientHello(client_hello) => client_hello.encode(nested.buf),
             HandshakePayload::ServerHello(server_hello) => server_hello.encode(nested.buf),
-            HandshakePayload::Certificate(certificate_chain) => certificate_chain.encode(nested.buf),
+            HandshakePayload::Certificate(certificate_chain) => {
+                certificate_chain.encode(nested.buf)
+            }
             HandshakePayload::ServerKeyExchange(kx) => kx.encode(nested.buf),
             HandshakePayload::ServerHelloDone => {}
             HandshakePayload::ClientKeyExchange(payload) => payload.encode(nested.buf),
-            HandshakePayload::CertificateVerify(digitaly_singed) => digitaly_singed.encode(nested.buf),
+            HandshakePayload::CertificateVerify(digitaly_singed) => {
+                digitaly_singed.encode(nested.buf)
+            }
             HandshakePayload::Finished(payload) => payload.encode(nested.buf),
             HandshakePayload::Unknown(payload) => payload.encode(nested.buf),
         }
@@ -158,7 +165,14 @@ pub struct SessionID {
     length: usize,
     data: [u8; 32],
 }
-
+impl SessionID {
+    pub fn empty() -> Self {
+        Self {
+            data: [0u8; 32], 
+            length: 0,
+        }
+    }
+}
 impl Codec<'_> for SessionID {
     fn encode(&self, bytes: &mut Vec<u8>) {
         debug_assert!(self.length <= 32);
@@ -217,7 +231,66 @@ impl Codec<'_> for SignatureAndHashAlgorithm {
     }
 }
 
-impl TLSListElement for SignatureAndHashAlgorithm {
+#[derive(Debug)]
+pub enum ServerNamePayload {
+    HostName(DnsName<'static>),
+    IpAddress(PayloadU16),
+    Unknown(Payload<'static>),
+}
+
+impl ServerNamePayload {
+    fn read_hostname(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let raw = PayloadU16::read(r)?;
+
+        use rustls_pki_types::ServerName;
+        match ServerName::try_from(raw.0.as_slice()) {
+            Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
+            Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw)),
+            Ok(_) | Err(_) => Err(InvalidMessage::MissingData("ServerName")),
+        }
+    }
+
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            ServerNamePayload::HostName(host_name) => {
+                (host_name.as_ref().len() as u16).encode(bytes);
+                bytes.extend_from_slice(host_name.as_ref().as_ref());
+            }
+            ServerNamePayload::IpAddress(ip_addr) => {
+                ip_addr.encode(bytes);
+            }
+            ServerNamePayload::Unknown(payload) => {
+                payload.encode(bytes);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ServerName {
+    pub(crate) typ: ServerNameType,
+    pub(crate) payload: ServerNamePayload,
+}
+
+impl Codec<'_> for ServerName {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.typ.encode(bytes);
+        self.payload.encode(bytes)
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let typ = ServerNameType::read(r)?;
+
+        let payload = match typ {
+            ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
+            _ => ServerNamePayload::Unknown(Payload::read(r).into_owned()),
+        };
+
+        Ok(Self { typ, payload })
+    }
+}
+
+impl TLSListElement for SignatureScheme {
     const LENGHT_SIZE: ListLength = ListLength::u16;
 }
 
@@ -229,11 +302,16 @@ impl TLSListElement for ECPointFormat {
     const LENGHT_SIZE: ListLength = ListLength::u8;
 }
 
+impl TLSListElement for ServerName {
+    const LENGHT_SIZE: ListLength = ListLength::u16;
+}
+
 #[derive(Debug)]
 pub enum ClientExtension {
-    Signature(Vec<SignatureAndHashAlgorithm>),
+    Signature(Vec<SignatureScheme>),
     NamedGroups(Vec<NamedCurve>),
     ECPointFormats(Vec<ECPointFormat>),
+    ServerName(Vec<ServerName>),
     Unknown(UnknownExtension),
 } // TODO: support extension
 
@@ -243,6 +321,7 @@ impl ClientExtension {
             ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
             ClientExtension::Signature(_) => ExtensionType::SignatureAlgorithm,
             ClientExtension::NamedGroups(_) => ExtensionType::EllipticCurves,
+            ClientExtension::ServerName(_) => ExtensionType::ServerName,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -253,6 +332,7 @@ impl Codec<'_> for ClientExtension {
         self.ext_typ().encode(bytes);
         let nest = LengthPrefixedBuffer::new(ListLength::u16, bytes);
         match self {
+            ClientExtension::ServerName(ref r) => r.encode(nest.buf),
             ClientExtension::Signature(ref r) => r.encode(nest.buf),
             ClientExtension::NamedGroups(ref r) => r.encode(nest.buf),
             ClientExtension::Unknown(ref r) => r.encode(nest.buf),
@@ -267,6 +347,7 @@ impl Codec<'_> for ClientExtension {
         let ext = match typ {
             ExtensionType::SignatureAlgorithm => Self::Signature(Vec::read(&mut sub)?),
             ExtensionType::EllipticCurves => Self::NamedGroups(Vec::read(&mut sub)?),
+            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -277,6 +358,8 @@ impl Codec<'_> for ClientExtension {
 
 pub enum ServerExtension {
     RenegotiationInfo(PayloadU8),
+    ExtendedMasterSecretAck,
+    ServerNameAck,
     Unknown(UnknownExtension),
 }
 
@@ -284,6 +367,8 @@ impl ServerExtension {
     fn ext_typ(&self) -> ExtensionType {
         match self {
             ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotationInfo,
+            ServerExtension::ExtendedMasterSecretAck => ExtensionType::ExtendedMasterSecret,
+            ServerExtension::ServerNameAck => ExtensionType::ServerName,
             ServerExtension::Unknown(ext) => ext.typ,
         }
     }
@@ -300,6 +385,7 @@ impl Codec<'_> for ServerExtension {
         let mut nested = LengthPrefixedBuffer::new(ListLength::u16, bytes);
 
         match self {
+            ServerExtension::ExtendedMasterSecretAck | ServerExtension::ServerNameAck => {}
             ServerExtension::RenegotiationInfo(r) => r.encode(nested.buf),
             ServerExtension::Unknown(unknown_extension) => unknown_extension.encode(nested.buf),
         }
@@ -340,7 +426,7 @@ impl ClientHelloPayload {
     pub(crate) fn find_extension(&self, typ: ExtensionType) -> Option<&ClientExtension> {
         self.extensions.iter().find(|ext| ext.ext_typ() == typ)
     }
-    pub(crate) fn signature_algorithm(&self) -> Option<&[SignatureAndHashAlgorithm]> {
+    pub(crate) fn signature_algorithm(&self) -> Option<&[SignatureScheme]> {
         match self.find_extension(ExtensionType::SignatureAlgorithm) {
             Some(ClientExtension::Signature(s)) => Some(s),
             _ => None,
@@ -357,6 +443,26 @@ impl ClientHelloPayload {
     pub(crate) fn ecpoints(&self) -> Option<&[ECPointFormat]> {
         match self.find_extension(ExtensionType::ECPointFormats)? {
             ClientExtension::ECPointFormats(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn supports_ems(&self) -> bool {
+        self.find_extension(ExtensionType::ExtendedMasterSecret)
+            .is_some()
+    }
+
+    pub(crate) fn sni_extension(&self) -> Option<&[ServerName]> {
+        let ext = self.find_extension(ExtensionType::ServerName)?;
+
+        match *ext {
+            ClientExtension::ServerName(ref req)
+                if !req
+                    .iter()
+                    .any(|name| matches!(name.payload, ServerNamePayload::IpAddress(_))) =>
+            {
+                Some(req)
+            }
             _ => None,
         }
     }
@@ -462,7 +568,7 @@ impl ServerECDHParams {
         Self {
             curve_type: ECCurveType::NamedCurve,
             named_group: kx.group(),
-            public: PayloadU8::new(kx.pub_key().to_vec())
+            public: PayloadU8::new(kx.pub_key().to_vec()),
         }
     }
 }
@@ -481,7 +587,7 @@ impl Codec<'_> for ServerECDHParams {
         }
         let grp = NamedCurve::read(r)?;
 
-        Ok(Self{
+        Ok(Self {
             curve_type: ct,
             named_group: grp,
             public: PayloadU8::read(r)?,

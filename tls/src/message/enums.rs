@@ -99,11 +99,12 @@ enum_builder! {
 enum_builder! {
     #[repr(u16)]
     pub enum ExtensionType {
-        // ServerName => 0,
+        ServerName => 0,
         SignatureAlgorithm => 13,
         EllipticCurves => 10,
         ECPointFormats => 11,
         RenegotationInfo => 0xff01,
+        ExtendedMasterSecret => 0x0017,
     }
 }
 
@@ -189,5 +190,56 @@ enum_builder! {
         ExplicitPrime => 0x01,
         ExplicitChar2 => 0x02,
         NamedCurve => 0x03,
+    }
+}
+
+enum_builder! {
+    /// The `ServerNameType` TLS protocol enum.  Values in this enum are taken
+    /// from the various RFCs covering TLS, and are listed by IANA.
+    /// The `Unknown` item is used when processing unrecognised ordinals.
+    #[repr(u8)]
+    pub(crate) enum ServerNameType {
+        HostName => 0x00,
+    }
+}
+
+enum_builder! {
+    /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
+    /// from the various RFCs covering TLS, and are listed by IANA.
+    /// The `Unknown` item is used when processing unrecognised ordinals.
+    #[repr(u16)]
+    pub enum SignatureScheme {
+        RSA_PKCS1_SHA1 => 0x0201,
+        ECDSA_SHA1_Legacy => 0x0203,
+        RSA_PKCS1_SHA256 => 0x0401,
+        ECDSA_NISTP256_SHA256 => 0x0403,
+        RSA_PKCS1_SHA384 => 0x0501,
+        ECDSA_NISTP384_SHA384 => 0x0503,
+        RSA_PKCS1_SHA512 => 0x0601,
+        ECDSA_NISTP521_SHA512 => 0x0603,
+        RSA_PSS_SHA256 => 0x0804,
+        RSA_PSS_SHA384 => 0x0805,
+        RSA_PSS_SHA512 => 0x0806,
+
+    }
+}
+
+impl SignatureScheme {
+    pub(crate) fn algorithm(&self) -> SignatureAlgorithm {
+        match *self {
+            Self::RSA_PKCS1_SHA1
+            | Self::RSA_PKCS1_SHA256
+            | Self::RSA_PKCS1_SHA384
+            | Self::RSA_PKCS1_SHA512
+            | Self::RSA_PSS_SHA256
+            | Self::RSA_PSS_SHA384
+            | Self::RSA_PSS_SHA512 => SignatureAlgorithm::rsa,
+            Self::ECDSA_SHA1_Legacy
+            | Self::ECDSA_NISTP256_SHA256
+            | Self::ECDSA_NISTP384_SHA384
+            | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ecdsa,
+
+            _ => SignatureAlgorithm::Unknown(0),
+        }
     }
 }

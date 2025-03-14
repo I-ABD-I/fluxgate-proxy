@@ -1,10 +1,25 @@
 use crate::codec::{Codec, Reader};
 use crate::config::CertifiedKey;
+use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter};
+use crate::crypto::hash;
+use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKx, SupportedKxGroup};
 use crate::crypto::provider::SupportedCipherSuite;
+use crate::crypto::sign::SigningKey;
+use crate::error::inappropriate_message;
 use crate::hs_hash::HandshakeHash;
-use crate::message::enums::{CipherSuite, CompressionMethod, ContentType, ECPointFormat, ExtensionType, NamedCurve, ProtocolVersion, SignatureAlgorithm};
-use crate::message::hs::{CertificateChain, ClientECDHParams, ClientHelloPayload, Random, ServerECDHParams, ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangePayload, SessionID, SignatureAndHashAlgorithm};
+use crate::message::base::Payload;
+use crate::message::ccs::ChangeCipherSpecPayload;
+use crate::message::enums::{
+    CipherSuite, CompressionMethod, ContentType, ECPointFormat, ExtensionType, NamedCurve,
+    ProtocolVersion, SignatureAlgorithm, SignatureScheme,
+};
+use crate::message::hs::{
+    CertificateChain, ClientECDHParams, ClientHelloPayload, Random, ServerECDHParams,
+    ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangePayload, SessionID,
+    SignatureAndHashAlgorithm,
+};
+use crate::verify::DigitalySinged;
 use crate::{
     config::ServerConfig,
     connection::TlsState,
@@ -17,21 +32,16 @@ use crate::{
 use log::debug;
 use rustls_pki_types::{CertificateDer, DnsName};
 use std::sync::Arc;
-use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter};
-use crate::crypto::hash;
-use crate::crypto::hash::Hash;
-use crate::crypto::sign::SigningKey;
-use crate::error::inappropriate_message;
-use crate::message::base::Payload;
-use crate::message::ccs::ChangeCipherSpecPayload;
-use crate::verify::DigitalySinged;
-
 
 pub struct Context<'a> {
     pub(crate) state: &'a mut TlsState,
 }
 pub trait State {
-    fn handle<'m>(self: Box<Self>, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error>;
+    fn handle(
+        self: Box<Self>,
+        cx: &mut Context,
+        message: Message<'_>,
+    ) -> Result<Box<dyn State>, Error>;
 }
 
 pub struct ExpectClientHello {
@@ -93,12 +103,16 @@ impl ExpectClientHello {
 //#region
 pub struct ClientHello<'a> {
     server_name: &'a Option<DnsName<'a>>,
-    sigschemes: &'a [SignatureAndHashAlgorithm],
+    sigschemes: &'a [SignatureScheme],
     cipher_suites: &'a [SupportedCipherSuite],
 }
 
 impl State for ExpectClientHello {
-    fn handle<'m>(self: Box<Self>, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error> {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut Context,
+        message: Message<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         let MessagePayload::HandshakePayload(HandshakePayload::ClientHello(client_hello)) =
             &message.payload
         else {
@@ -147,10 +161,11 @@ impl State for ExpectClientHello {
         FinishCHHandling {
             config: self.config.clone(),
             transcript: hshash,
-            suite: &suite.0,
+            suite: suite.0,
             randoms: ConnectionRandoms {
-                client_random, server_random
-            }
+                client_random,
+                server_random,
+            },
         }
         .handle(cx, &certkey, client_hello, kxg, sig)
     }
@@ -171,7 +186,7 @@ struct HandshakeFlight<'a> {
     buffer: Vec<u8>,
     hash: &'a mut HandshakeHash,
 }
-impl<'a> HandshakeFlight<'a> {
+impl HandshakeFlight<'_> {
     fn add(&mut self, message: &HandshakePayload) {
         let start = self.buffer.len();
         message.encode(&mut self.buffer);
@@ -182,18 +197,17 @@ impl<'a> HandshakeFlight<'a> {
         tls_state.send_message(
             Message {
                 version: ProtocolVersion::TLSv1_2,
-                payload: MessagePayload::HandshakeFlight(Payload::new(self.buffer))
+                payload: MessagePayload::HandshakeFlight(Payload::new(self.buffer)),
             },
-            false
+            false,
         );
-        // todo!("send tls messages")
     }
 }
 
 #[derive(Default)]
 
 struct ExtensionProcessing {
-    exts: Vec<ServerExtension>
+    exts: Vec<ServerExtension>,
 }
 
 impl ExtensionProcessing {
@@ -201,16 +215,24 @@ impl ExtensionProcessing {
         Self::default()
     }
 
-    fn process(&mut self, ch: &ClientHelloPayload) {
-        
+    fn process(&mut self, ch: &ClientHelloPayload, using_ems: bool) {
+        if ch.sni_extension().is_some() {
+            self.exts.push(ServerExtension::ServerNameAck);
+        }
+
         // dont offer reneg, stops things from complaining abt insecure reneg
-        let secure_reneg_offered = ch.find_extension(
-            ExtensionType::RenegotationInfo
-        ).is_some() || ch.cipher_suites.contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+        let secure_reneg_offered = ch.find_extension(ExtensionType::RenegotationInfo).is_some()
+            || ch
+                .cipher_suites
+                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         if secure_reneg_offered {
-            self.exts.push(ServerExtension::make_empty_reneg_info())
+            self.exts.push(ServerExtension::make_empty_reneg_info());
         }
+
+        // if using_ems {
+        //     self.exts.push(ServerExtension::ExtendedMasterSecretAck)
+        // }
     }
 }
 
@@ -220,9 +242,10 @@ fn emit_server_hello(
     server_random: Random,
     suite: &'static crypto::CipherSuite,
     session_id: SessionID,
+    using_ems: bool,
 ) {
     let mut ep = ExtensionProcessing::new();
-    ep.process(client_hello);
+    ep.process(client_hello, using_ems);
 
     let sh = HandshakePayload::ServerHello(ServerHelloPayload {
         server_version: ProtocolVersion::TLSv1_2,
@@ -244,10 +267,11 @@ fn emit_certificate(flight: &mut HandshakeFlight, cert: &[CertificateDer<'_>]) {
 
 fn emit_server_kx(
     flight: &mut HandshakeFlight,
-    sigschemes: Vec<SignatureAndHashAlgorithm>,
+    sigschemes: Vec<SignatureScheme>,
     selected_kxg: &'static dyn SupportedKxGroup,
     signing_key: &dyn SigningKey,
-    randoms: &ConnectionRandoms) -> Result<Box<dyn ActiveKx>, Error> {
+    randoms: &ConnectionRandoms,
+) -> Result<Box<dyn ActiveKx>, Error> {
     let kx = selected_kxg.start()?;
     let kx_params = ServerECDHParams::new(&*kx);
 
@@ -256,9 +280,9 @@ fn emit_server_kx(
     msg.extend(randoms.server_random.as_ref());
     kx_params.encode(&mut msg);
 
-    let signer = signing_key.choose_scheme(&sigschemes).ok_or_else(|| {
-        Error::General("incompatible signing key")
-    })?;
+    let signer = signing_key
+        .choose_scheme(&sigschemes)
+        .ok_or(Error::General("incompatible signing key"))?;
     let sigscheme = signer.scheme();
     let sig = signer.sign(&msg)?;
 
@@ -267,9 +291,7 @@ fn emit_server_kx(
         dss: DigitalySinged::new(sigscheme, sig),
     });
 
-    flight.add(
-        &HandshakePayload::ServerKeyExchange(skx),
-    );
+    flight.add(&HandshakePayload::ServerKeyExchange(skx));
     Ok(kx)
 }
 fn emit_server_hello_done(flight: &mut HandshakeFlight) {
@@ -282,8 +304,10 @@ impl FinishCHHandling {
         server_key: &CertifiedKey,
         client_hello: &ClientHelloPayload,
         selected_kxg: &'static dyn SupportedKxGroup,
-        sigschemes_ext: Vec<SignatureAndHashAlgorithm>,
+        sigschemes_ext: Vec<SignatureScheme>,
     ) -> Result<Box<dyn State>, Error> {
+        let using_ems = client_hello.supports_ems();
+
         let ecpoints_ext = client_hello
             .ecpoints()
             .unwrap_or(&[ECPointFormat::Uncompressed]);
@@ -305,10 +329,17 @@ impl FinishCHHandling {
             client_hello,
             self.randoms.server_random,
             self.suite,
-            client_hello.session,
+            SessionID::empty(), // not offering session resumption for now.
+            using_ems,
         );
         emit_certificate(&mut flight, &server_key.cert);
-        let kx= emit_server_kx(&mut flight,sigschemes, selected_kxg, &*server_key.key, &self.randoms)?;
+        let kx = emit_server_kx(
+            &mut flight,
+            sigschemes,
+            selected_kxg,
+            &*server_key.key,
+            &self.randoms,
+        )?;
         emit_server_hello_done(&mut flight);
 
         flight.finish(cx.state);
@@ -318,7 +349,8 @@ impl FinishCHHandling {
             suite: self.suite,
             transcript: self.transcript,
             randoms: self.randoms,
-            server_key: kx
+            server_key: kx,
+            using_ems,
         }))
     }
 }
@@ -329,6 +361,7 @@ pub struct ExpectClientKx {
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     server_key: Box<dyn ActiveKx>,
+    using_ems: bool,
 }
 
 pub(crate) struct ConnectionSecrets {
@@ -368,7 +401,9 @@ impl ConnectionSecrets {
         Ok(ret)
     }
 
-    pub(crate) fn make_cipher_pair(&self) -> (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>){
+    pub(crate) fn make_cipher_pair(
+        &self,
+    ) -> (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>) {
         let key_block = self.make_key_block();
         let shape = self.suite.aead_algo.key_shape();
 
@@ -378,10 +413,13 @@ impl ConnectionSecrets {
         let (write_iv, extra) = key_block.split_at(shape.1);
 
         (
-            self.suite.aead_algo.decrypter(AeadKey::new(read_key), read_iv),
-            self.suite.aead_algo.encrypter(AeadKey::new(write_key), write_iv, extra)
+            self.suite
+                .aead_algo
+                .decrypter(AeadKey::new(read_key), read_iv),
+            self.suite
+                .aead_algo
+                .encrypter(AeadKey::new(write_key), write_iv, extra),
         )
-
     }
 
     fn make_key_block(&self) -> Vec<u8> {
@@ -396,29 +434,28 @@ impl ConnectionSecrets {
             seed
         };
 
-        self.suite.prf_provider.for_secret(
-            &mut out, &self.master_secret,
-            b"key expansion",
-            &seed,
-        );
+        self.suite
+            .prf_provider
+            .for_secret(&mut out, &self.master_secret, b"key expansion", &seed);
 
         out
     }
 
-    fn make_verify_data(&self, hash: &hash::Output, label: &[u8]) -> [u8; 12]{
+    fn make_verify_data(&self, hash: &hash::Output, label: &[u8]) -> [u8; 12] {
         let mut out = [0u8; 12];
-        self.suite.prf_provider.for_secret(
-            &mut out,
-            &self.master_secret,
-            label,
-            hash.as_ref(),
-        );
+        self.suite
+            .prf_provider
+            .for_secret(&mut out, &self.master_secret, label, hash.as_ref());
         out
     }
 }
 
 impl State for ExpectClientKx {
-    fn handle<'m>(mut self: Box<Self>, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error> {
+    fn handle(
+        mut self: Box<Self>,
+        cx: &mut Context,
+        message: Message<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         let MessagePayload::HandshakePayload(HandshakePayload::ClientKeyExchange(client_kx)) =
             &message.payload
         else {
@@ -433,20 +470,20 @@ impl State for ExpectClientKx {
             self.server_key,
             &client_kx_params.payload.0,
             self.randoms,
-            self.suite
-        ).unwrap();
+            self.suite,
+        )
+        .unwrap();
 
         cx.state.kx_state.done();
         cx.state.start_encryption(&secrets);
 
-        Ok(
-            Box::new(ExpectCcs {
-                config: self.config, secrets, transcript: self.transcript
-            }
-        ))
+        Ok(Box::new(ExpectCcs {
+            config: self.config,
+            secrets,
+            transcript: self.transcript,
+        }))
     }
 }
-
 
 struct ExpectCcs {
     config: Arc<ServerConfig>,
@@ -454,18 +491,27 @@ struct ExpectCcs {
     transcript: HandshakeHash,
 }
 impl State for ExpectCcs {
-    fn handle<'m>(mut self: Box<Self>, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error> {
+    fn handle(
+        mut self: Box<Self>,
+        cx: &mut Context,
+        message: Message<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         match message.payload {
-            MessagePayload::ChangeCipherSpec(..) => {},
+            MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
-                return Err(inappropriate_message(&payload, &[ContentType::ChangeCipherSpec]));
+                return Err(inappropriate_message(
+                    &payload,
+                    &[ContentType::ChangeCipherSpec],
+                ));
             }
         }
 
         cx.state.record_layer.start_decrypting();
 
         Ok(Box::new(ExpectFinished {
-            config: self.config, secrets: self.secrets, transcript: self.transcript,
+            config: self.config,
+            secrets: self.secrets,
+            transcript: self.transcript,
         }))
     }
 }
@@ -473,19 +519,25 @@ impl State for ExpectCcs {
 fn emit_ccs(state: &mut TlsState) {
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload)
+        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload),
     };
 
     state.send_message(m, false);
 }
 
-fn emit_finished(state: &mut TlsState, transcript: &mut HandshakeHash, secrets: &ConnectionSecrets) {
+fn emit_finished(
+    state: &mut TlsState,
+    transcript: &mut HandshakeHash,
+    secrets: &ConnectionSecrets,
+) {
     let vh = transcript.current_hash();
     let verify_data = secrets.make_verify_data(&vh, b"server finished");
 
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::HandshakePayload(HandshakePayload::Finished(Payload::Borrowed(&verify_data)))
+        payload: MessagePayload::HandshakePayload(HandshakePayload::Finished(Payload::Borrowed(
+            &verify_data,
+        ))),
     };
 
     transcript.add_message(&m);
@@ -499,8 +551,14 @@ struct ExpectFinished {
 }
 
 impl State for ExpectFinished {
-    fn handle<'m>(mut self: Box<Self>, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error> {
-        let MessagePayload::HandshakePayload(HandshakePayload::Finished(finished)) = &message.payload else {
+    fn handle(
+        mut self: Box<Self>,
+        cx: &mut Context,
+        message: Message<'_>,
+    ) -> Result<Box<dyn State>, Error> {
+        let MessagePayload::HandshakePayload(HandshakePayload::Finished(finished)) =
+            &message.payload
+        else {
             return Err(Error::InappropriateHandshakeMessage);
         };
 
@@ -510,26 +568,35 @@ impl State for ExpectFinished {
 
         match expected_verify_data == finished.bytes() {
             true => {}
-            false => todo!("handle finished msg wrong hash")
+            false => todo!("handle finished msg wrong hash"),
         }
 
         self.transcript.add_message(&message);
         emit_ccs(cx.state);
         emit_finished(cx.state, &mut self.transcript, &self.secrets);
+        cx.state.start_traffic();
 
         Ok(Box::new(ExpectTraffic {}))
     }
 }
 
-
 struct ExpectTraffic;
 
 impl State for ExpectTraffic {
-    fn handle<'m>(self: Box<Self>, cx: &mut Context, message: Message<'m>) -> Result<Box<dyn State>, Error> {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut Context,
+        message: Message<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         match message.payload {
-            MessagePayload::ApplicationData(appdata) => {},
+            MessagePayload::ApplicationData(appdata) => {
+                cx.state.received_plaintext.extend(appdata.bytes())
+            }
             payload => {
-                return Err(inappropriate_message(&payload, &[ContentType::ApplicationData]));
+                return Err(inappropriate_message(
+                    &payload,
+                    &[ContentType::ApplicationData],
+                ));
             }
         }
 

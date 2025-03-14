@@ -1,6 +1,4 @@
-use core::slice;
-
-use crate::codec::{self, Codec, Reader, TLSListElement};
+use crate::codec::{Codec, Reader, TLSListElement};
 
 #[derive(Debug)]
 pub enum Payload<'a> {
@@ -12,7 +10,7 @@ impl<'a> Codec<'a> for Payload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let slice = match self {
             Payload::Borrowed(s) => *s,
-            Payload::Owned(vec) => &vec,
+            Payload::Owned(vec) => vec,
         };
         bytes.extend_from_slice(slice);
     }
@@ -31,13 +29,13 @@ impl<'a> Payload<'a> {
         Payload::Owned(self.into_vec())
     }
 
-    fn into_vec(self) -> Vec<u8> {
+    pub fn into_vec(self) -> Vec<u8> {
         match self {
             Payload::Borrowed(slice) => slice.into(),
             Payload::Owned(vec) => vec,
         }
     }
-    
+
     pub(crate) fn bytes(&self) -> &[u8] {
         match self {
             Payload::Borrowed(slice) => slice,
@@ -121,5 +119,3 @@ impl Codec<'_> for PayloadU16 {
         Ok(Self::new(body))
     }
 }
-
-

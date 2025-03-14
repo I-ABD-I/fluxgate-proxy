@@ -59,7 +59,7 @@ pub trait Codec<'a>: Sized {
     }
 }
 
-impl<'a> Codec<'a> for u8 {
+impl Codec<'_> for u8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
@@ -71,7 +71,7 @@ impl<'a> Codec<'a> for u8 {
     }
 }
 
-impl<'a> Codec<'a> for u16 {
+impl Codec<'_> for u16 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.to_be_bytes());
     }
@@ -108,7 +108,7 @@ impl Codec<'_> for u24 {
     }
 }
 
-impl<'a> Codec<'a> for u32 {
+impl Codec<'_> for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.to_be_bytes());
     }
@@ -120,7 +120,7 @@ impl<'a> Codec<'a> for u32 {
     }
 }
 
-impl<'a> Codec<'a> for u64 {
+impl Codec<'_> for u64 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.to_be_bytes());
     }
@@ -159,14 +159,14 @@ impl Drop for LengthPrefixedBuffer<'_> {
     fn drop(&mut self) {
         match self.size_len {
             ListLength::u8 => {
-                let length = (self.buf.len() - self.len_offset - 1) as u8;
-                debug_assert!(length <= u8::MAX);
-                self.buf[self.len_offset] = length;
+                let length = (self.buf.len() - self.len_offset - 1);
+                debug_assert!(length <= u8::MAX as usize);
+                self.buf[self.len_offset] = length as u8;
             }
 
             ListLength::u16 => {
-                let length = (self.buf.len() - self.len_offset - 2) as u16;
-                debug_assert!(length <= u16::MAX);
+                let length = (self.buf.len() - self.len_offset - 2);
+                debug_assert!(length <= u16::MAX as usize);
                 self.buf[self.len_offset..=self.len_offset + 1]
                     .copy_from_slice(&length.to_be_bytes());
             }

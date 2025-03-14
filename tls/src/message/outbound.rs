@@ -1,5 +1,3 @@
-use crate::codec::{Codec, Reader};
-use crate::error::InvalidMessage;
 use crate::message::enums::{ContentType, ProtocolVersion};
 use crate::message::HEADER_SIZE;
 
@@ -12,6 +10,7 @@ pub struct OutboundOpaqueMessage {
     pub version: ProtocolVersion,
     pub payload: PrefixedPayload,
 }
+#[derive(Clone, Debug, Copy)]
 pub struct OutboundPlainMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,

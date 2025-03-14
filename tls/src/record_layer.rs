@@ -7,7 +7,7 @@ use crate::message::outbound::{OutboundOpaqueMessage, OutboundPlainMessage};
 enum EncryptionState {
     Invalid,
     Prepared,
-    Active
+    Active,
 }
 pub(crate) struct RecordLayer {
     message_encrypter: Box<dyn MessageEncrypter>,
@@ -36,7 +36,7 @@ impl RecordLayer {
         self.message_encrypter = encrypter;
         self.encrypt_state = EncryptionState::Prepared;
     }
-    
+
     pub(crate) fn prepare_decrypter(&mut self, decrypter: Box<dyn MessageDecrypter>) {
         self.message_decrypter = decrypter;
         self.decrypt_state = EncryptionState::Prepared;
@@ -46,12 +46,19 @@ impl RecordLayer {
         debug_assert!(self.decrypt_state == EncryptionState::Prepared);
         self.decrypt_state = EncryptionState::Active;
     }
-    
+
     pub(crate) fn should_decrypt(&self) -> bool {
         self.decrypt_state == EncryptionState::Active
     }
+    pub(crate) fn should_encrypt(&self) -> bool {
+        self.encrypt_state == EncryptionState::Active
+    }
 
-    pub(crate) fn decrypt<'a>(&mut self, message: InboundOpaqueMessage<'a>) -> Result<InboundPlainMessage<'a>, Error> {
+    
+    pub(crate) fn decrypt<'a>(
+        &mut self,
+        message: InboundOpaqueMessage<'a>,
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         if self.decrypt_state != EncryptionState::Active {
             return Ok(message.into());
         }

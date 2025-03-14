@@ -14,7 +14,7 @@ macro_rules! enum_builder {
             $( $enum_var ),*
             ,Unknown($uint)
         }
-        
+
         impl $enum_name {
             $enum_vis fn to_array(self) -> [u8; core::mem::size_of::<$uint>()] {
                 <$uint>::from(self).to_be_bytes()
@@ -29,7 +29,7 @@ macro_rules! enum_builder {
             fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
                 match <$uint>::read(r) {
                     Ok(x) => Ok($enum_name::from(x)),
-                    Err(_) => Err(crate::error::InvalidMessage::MissingData(stringify!($enum_name))),
+                    Err(_) => Err($crate::error::InvalidMessage::MissingData(stringify!($enum_name))),
                 }
             }
         }
