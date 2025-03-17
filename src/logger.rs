@@ -16,7 +16,7 @@ pub(super) fn create_logger(verbose: bool) -> anyhow::Result<()> {
         .encoder(Box::new(PatternEncoder::new(
             "{d(%Y-%m-%d %H:%M:%S)} {h({l})} [{h({t})}] {m}{n}",
         )))
-        .build("log/fluxgate.log")?;
+        .build("logs/fluxgate.log")?;
 
     let fluxgate_logger = Logger::builder()
         .appenders(["console", "file"])

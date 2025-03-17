@@ -1,6 +1,7 @@
 #![allow(unused)]
 extern crate core;
 
+mod acceptor;
 pub(crate) mod codec;
 pub mod config;
 mod connection;
@@ -14,7 +15,13 @@ pub mod stream;
 pub(crate) mod verify;
 
 pub mod server {
+    use super::acceptor;
     use super::connection;
 
+    pub use acceptor::*;
     pub use connection::Connection;
+}
+
+pub mod pki_types {
+    pub use rustls_pki_types::*;
 }
