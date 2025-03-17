@@ -16,3 +16,4 @@ serde = { version = "1.0.215", features = ["derive"] }
 thiserror = "2.0.4"
 layered = { path = "./layered/" }
 tls = { path = "./tls/" }
+chrono = "0.4.40"
