@@ -466,8 +466,6 @@ pub trait WriteTo {
 }
 impl WriteTo for Vec<u8> {
     fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        wr.write(self);
-
         match wr.write(self) {
             Ok(len) => {
                 self.drain(..len);
