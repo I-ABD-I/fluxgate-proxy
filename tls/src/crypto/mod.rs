@@ -17,11 +17,11 @@ use rustls_pki_types::PrivateKeyDer;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-pub trait SecureRandom: Debug {
+pub trait SecureRandom: Send + Sync {
     fn fill(&self, dest: &mut [u8]) -> Result<(), GetRandomFailed>;
 }
 
-pub trait KeyProvider: Debug {
+pub trait KeyProvider: Send + Sync {
     fn load_pk(&self, key_der: PrivateKeyDer<'static>) -> Result<Arc<dyn sign::SigningKey>, Error>;
 }
 #[derive(Clone, Copy, Debug)]

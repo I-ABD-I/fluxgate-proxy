@@ -52,6 +52,12 @@ impl KxState {
         }
     }
 }
+
+impl Default for TlsState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl TlsState {
     pub fn new() -> Self {
         Self {
@@ -271,7 +277,7 @@ impl ConnectionCore {
         let message = match iter.next().transpose() {
             Ok(Some(message)) => message,
             Ok(None) => return Ok(None),
-            Err(e) => todo!("{:?}", e),
+            Err(e) => return Err(self.handle_deframe_error(e)),
         };
 
         let allowed_plaintext = match message.typ {
@@ -312,6 +318,17 @@ impl ConnectionCore {
         }
 
         self.process_main_protocol(msg, state, sendable_plaintext)
+    }
+
+    fn handle_deframe_error(&mut self, err: Error) -> Error {
+        match err {
+            Error::InvalidMessage(err) => self.send_fatal(AlertDescription::DecodeError, err),
+            Error::PeerSendOversizedRecord => {
+                self.send_fatal(AlertDescription::RecordOverflow, err)
+            }
+            Error::DecryptError => self.send_fatal(AlertDescription::DecryptError, err),
+            error => error,
+        }
     }
 }
 

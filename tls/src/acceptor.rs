@@ -134,15 +134,12 @@ impl Accepted {
 
     fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
         match &message.payload {
-            MessagePayload::HandshakePayload(payload) => match &payload {
-                HandshakePayload::ClientHello(ch) => ch,
-                _ => unreachable!(),
-            },
+            MessagePayload::HandshakePayload(HandshakePayload::ClientHello(ch)) => ch,
             _ => unreachable!(),
         }
     }
 
-    fn into_connection(
+    pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<Connection, (Error, AcceptedAlert)> {

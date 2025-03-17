@@ -93,7 +93,7 @@ impl ExpectClientHello {
 
         let starting_hash = suite.0.hash_provider;
         let mut hshash = HandshakeHash::start_hash(starting_hash);
-        hshash.add_message(&message);
+        hshash.add_message(message);
 
         let client_random = client_hello.random;
         let server_random = Random::new(self.config.provider.random)?;

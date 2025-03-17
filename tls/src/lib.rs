@@ -1,6 +1,7 @@
 #![allow(unused)]
 extern crate core;
 
+mod acceptor;
 pub(crate) mod codec;
 pub mod config;
 mod connection;
@@ -12,11 +13,12 @@ mod record_layer;
 pub mod state;
 pub mod stream;
 pub(crate) mod verify;
-mod acceptor;
 
 pub mod server {
+    use super::acceptor;
     use super::connection;
 
+    pub use acceptor::*;
     pub use connection::Connection;
 }
 

@@ -6,7 +6,7 @@ use rustls_pki_types::PrivateKeyDer;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-pub trait SigningKey: Debug {
+pub trait SigningKey: Debug + Send + Sync {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
     fn algorithm(&self) -> SignatureAlgorithm;
 }

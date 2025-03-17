@@ -2,7 +2,7 @@ use crate::error::{Error, GetRandomFailed};
 use crate::message::enums::NamedCurve;
 use std::fmt::Debug;
 
-pub trait SupportedKxGroup: Sync + Debug {
+pub trait SupportedKxGroup: Send + Sync + Debug {
     fn start(&self) -> Result<Box<dyn ActiveKx>, Error>;
 
     fn group(&self) -> NamedCurve;

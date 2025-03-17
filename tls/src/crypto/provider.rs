@@ -5,17 +5,15 @@ use crate::crypto::kx::{KeyExchangeAlgorithm, SupportedKxGroup, X25519};
 use crate::crypto::sign::{any_supported_type, SigningKey};
 use crate::crypto::SecureRandom;
 use crate::error::{Error, GetRandomFailed};
-use crate::message::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::message::hs::SignatureAndHashAlgorithm;
+use crate::message::enums::SignatureScheme;
 use crate::{crypto, message};
 use ring::hkdf::KeyType;
+use rustls_pki_types::PrivateKeyDer;
 use std::fmt::Debug;
 use std::sync::Arc;
-use rustls_pki_types::PrivateKeyDer;
 
 #[derive(Copy, Clone, Debug)]
 pub struct SupportedCipherSuite(pub(crate) &'static crypto::CipherSuite);
-#[derive(Debug)]
 
 pub struct CryptoProvider {
     pub cipher_suites: Vec<SupportedCipherSuite>,
@@ -46,7 +44,10 @@ impl SecureRandom for Ring {
 }
 
 impl crypto::KeyProvider for Ring {
-    fn load_pk(&self, private_key_der: PrivateKeyDer<'static>) -> Result<Arc<dyn SigningKey>, Error> {
+    fn load_pk(
+        &self,
+        private_key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn SigningKey>, Error> {
         any_supported_type(&private_key_der)
     }
 }

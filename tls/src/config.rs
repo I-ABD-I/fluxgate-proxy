@@ -34,7 +34,7 @@ impl CertifiedKey {
     }
 }
 
-pub trait ServerCertificateResolver: Debug {
+pub trait ServerCertificateResolver: Send + Sync + Debug {
     fn resolve(&self, client_hello: ClientHello) -> Option<Arc<CertifiedKey>>;
 }
 #[derive(Debug)]
@@ -51,8 +51,6 @@ impl From<CertifiedKey> for SingleCertificateResolver {
         Self(Arc::new(c))
     }
 }
-
-#[derive(Debug)]
 
 pub struct ServerConfig {
     pub provider: Arc<CryptoProvider>,
