@@ -9,6 +9,7 @@ use crate::codec::TLSListElement;
 use crate::crypto::kx::ActiveKx;
 use crate::crypto::SecureRandom;
 use crate::error::{GetRandomFailed, InvalidMessage};
+use crate::message::hs::HandshakePayload::{HelloRequest, ServerHelloDone};
 use crate::verify::DigitalySinged;
 
 use super::base::PayloadU16;
@@ -62,6 +63,23 @@ impl HandshakePayload<'_> {
             HandshakePayload::ClientKeyExchange(_) => HandshakeType::ClientKeyExchange,
             HandshakePayload::Finished(_) => HandshakeType::Finished,
             HandshakePayload::Unknown(_) => HandshakeType::Unknown(0),
+        }
+    }
+
+    pub fn into_owned(self) -> HandshakePayload<'static> {
+        use HandshakePayload::*;
+
+        match self {
+            HelloRequest => HelloRequest,
+            ClientHello(x) => ClientHello(x),
+            ServerHello(x) => ServerHello(x),
+            Certificate(x) => Certificate(x.into_owned()),
+            ServerKeyExchange(x) => ServerKeyExchange(x),
+            CertificateVerify(x) => CertificateVerify(x),
+            ServerHelloDone => ServerHelloDone,
+            ClientKeyExchange(x) => ClientKeyExchange(x.into_owned()),
+            Finished(x) => Finished(x.into_owned()),
+            Unknown(x) => Unknown(x.into_owned()),
         }
     }
 }
@@ -168,7 +186,7 @@ pub struct SessionID {
 impl SessionID {
     pub fn empty() -> Self {
         Self {
-            data: [0u8; 32], 
+            data: [0u8; 32],
             length: 0,
         }
     }
@@ -523,6 +541,12 @@ impl Codec<'_> for ServerHelloPayload {
 
 #[derive(Debug)]
 pub struct CertificateChain<'a>(pub Vec<CertificateDer<'a>>);
+
+impl CertificateChain<'_> {
+    pub(crate) fn into_owned(self) -> CertificateChain<'static> {
+        CertificateChain(self.0.into_iter().map(|c| c.into_owned()).collect())
+    }
+}
 
 impl TLSListElement for CertificateDer<'_> {
     const LENGHT_SIZE: ListLength = ListLength::u24 {

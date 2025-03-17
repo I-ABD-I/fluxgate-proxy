@@ -13,14 +13,16 @@ use crate::message;
 use crate::message::enums::SignatureScheme;
 use cipher::AeadAlgorithm;
 use hash::Hash;
+use rustls_pki_types::PrivateKeyDer;
+use std::fmt::Debug;
 use std::sync::Arc;
 
-pub trait SecureRandom {
+pub trait SecureRandom: Debug {
     fn fill(&self, dest: &mut [u8]) -> Result<(), GetRandomFailed>;
 }
 
-pub trait KeyProvider {
-    fn load_pk(&self) -> Result<Arc<dyn sign::SigningKey>, Error>;
+pub trait KeyProvider: Debug {
+    fn load_pk(&self, key_der: PrivateKeyDer<'static>) -> Result<Arc<dyn sign::SigningKey>, Error>;
 }
 #[derive(Clone, Copy, Debug)]
 pub struct CipherSuite {

@@ -12,9 +12,14 @@ mod record_layer;
 pub mod state;
 pub mod stream;
 pub(crate) mod verify;
+mod acceptor;
 
 pub mod server {
     use super::connection;
 
     pub use connection::Connection;
+}
+
+pub mod pki_types {
+    pub use rustls_pki_types::*;
 }

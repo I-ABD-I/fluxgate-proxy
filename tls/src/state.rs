@@ -49,10 +49,65 @@ pub struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub fn new() -> Self {
-        Self {
-            config: Arc::new(ServerConfig::new()),
+    pub fn new(config: Arc<ServerConfig>) -> Self {
+        Self { config }
+    }
+
+    pub(crate) fn with_certified_key(
+        self,
+        mut sig: Vec<SignatureScheme>,
+        client_hello: &ClientHelloPayload,
+        message: &Message<'_>,
+        cx: &mut Context,
+    ) -> Result<Box<dyn State>, Error> {
+        let client_suites: Vec<_> = self
+            .config
+            .provider
+            .cipher_suites
+            .iter()
+            .copied()
+            .filter(|scs| client_hello.cipher_suites.contains(&scs.0.suite))
+            .collect();
+
+        sig.retain(|scheme| compatible_sigscheme_for_suites(*scheme, &client_suites));
+
+        // only gonna send X.509 Certificate client may terminate
+        let certkey = {
+            let client_hello = ClientHello {
+                server_name: &None, // TODO: CHANGE THIS
+                sigschemes: &sig,
+                cipher_suites: &client_suites,
+            };
+
+            self.config.cert_resolver.resolve(client_hello).unwrap()
+        };
+
+        #[allow(clippy::unnecessary_unwrap, clippy::unwrap_used)]
+        let (suite, kxg) = self
+            .choose_suite_and_kx_group(
+                certkey.key.algorithm(),
+                client_hello.named_groups().unwrap_or(&[]),
+                &client_hello.cipher_suites,
+            )
+            .unwrap();
+
+        let starting_hash = suite.0.hash_provider;
+        let mut hshash = HandshakeHash::start_hash(starting_hash);
+        hshash.add_message(&message);
+
+        let client_random = client_hello.random;
+        let server_random = Random::new(self.config.provider.random)?;
+
+        FinishCHHandling {
+            config: self.config.clone(),
+            transcript: hshash,
+            suite: suite.0,
+            randoms: ConnectionRandoms {
+                client_random,
+                server_random,
+            },
         }
+        .handle(cx, &certkey, client_hello, kxg, sig)
     }
 
     fn choose_suite_and_kx_group(
@@ -102,9 +157,22 @@ impl ExpectClientHello {
 }
 //#region
 pub struct ClientHello<'a> {
-    server_name: &'a Option<DnsName<'a>>,
-    sigschemes: &'a [SignatureScheme],
-    cipher_suites: &'a [SupportedCipherSuite],
+    pub(crate) server_name: &'a Option<DnsName<'a>>,
+    pub(crate) sigschemes: &'a [SignatureScheme],
+    pub(crate) cipher_suites: &'a [SupportedCipherSuite],
+}
+
+pub(crate) fn process_client_hello<'m>(
+    message: &'m Message<'_>,
+) -> Result<(&'m ClientHelloPayload, Vec<SignatureScheme>), Error> {
+    let MessagePayload::HandshakePayload(HandshakePayload::ClientHello(client_hello)) =
+        &message.payload
+    else {
+        return Err(Error::InappropriateHandshakeMessage);
+    };
+
+    let mut sig = client_hello.signature_algorithm().unwrap().to_owned();
+    Ok((client_hello, sig))
 }
 
 impl State for ExpectClientHello {
@@ -113,61 +181,8 @@ impl State for ExpectClientHello {
         cx: &mut Context,
         message: Message<'_>,
     ) -> Result<Box<dyn State>, Error> {
-        let MessagePayload::HandshakePayload(HandshakePayload::ClientHello(client_hello)) =
-            &message.payload
-        else {
-            return Err(Error::InappropriateHandshakeMessage);
-        };
-
-        let mut sig = client_hello.signature_algorithm().unwrap().to_owned();
-        let client_suites: Vec<_> = self
-            .config
-            .provider
-            .cipher_suites
-            .iter()
-            .copied()
-            .filter(|scs| client_hello.cipher_suites.contains(&scs.0.suite))
-            .collect();
-
-        sig.retain(|scheme| compatible_sigscheme_for_suites(*scheme, &client_suites));
-
-        // only gonna send X.509 Certificate client may terminate
-        let certkey = {
-            let client_hello = ClientHello {
-                server_name: &None, // TODO: CHANGE THIS
-                sigschemes: &sig,
-                cipher_suites: &client_suites,
-            };
-
-            self.config.cert_resolver.resolve(client_hello).unwrap()
-        };
-
-        #[allow(clippy::unnecessary_unwrap, clippy::unwrap_used)]
-        let (suite, kxg) = self
-            .choose_suite_and_kx_group(
-                certkey.key.algorithm(),
-                client_hello.named_groups().unwrap_or(&[]),
-                &client_hello.cipher_suites,
-            )
-            .unwrap();
-
-        let starting_hash = suite.0.hash_provider;
-        let mut hshash = HandshakeHash::start_hash(starting_hash);
-        hshash.add_message(&message);
-
-        let client_random = client_hello.random;
-        let server_random = Random::new(self.config.provider.random)?;
-
-        FinishCHHandling {
-            config: self.config.clone(),
-            transcript: hshash,
-            suite: suite.0,
-            randoms: ConnectionRandoms {
-                client_random,
-                server_random,
-            },
-        }
-        .handle(cx, &certkey, client_hello, kxg, sig)
+        let (client_hello, mut sig) = process_client_hello(&message)?;
+        self.with_certified_key(sig, client_hello, &message, cx)
     }
 }
 

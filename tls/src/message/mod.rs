@@ -73,6 +73,18 @@ impl<'a> MessagePayload<'a> {
             MessagePayload::ApplicationData(_) => ContentType::ApplicationData,
         }
     }
+
+    pub fn into_owned(self) -> MessagePayload<'static> {
+        use MessagePayload::*;
+
+        match self {
+            ChangeCipherSpec(x) => ChangeCipherSpec(x),
+            Alert(x) => Alert(x),
+            HandshakePayload(x) => HandshakePayload(x.into_owned()),
+            HandshakeFlight(x) => HandshakeFlight(x.into_owned()),
+            ApplicationData(x) => ApplicationData(x.into_owned()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -86,6 +98,14 @@ impl Message<'_> {
         Self {
             version: TLSv1_2,
             payload: MessagePayload::Alert(AlertPayload { level, description }),
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> Message<'static> {
+        let Self { version, payload } = self;
+        Message {
+            version,
+            payload: payload.into_owned(),
         }
     }
 }

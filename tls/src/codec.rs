@@ -168,11 +168,12 @@ impl Drop for LengthPrefixedBuffer<'_> {
                 let length = (self.buf.len() - self.len_offset - 2);
                 debug_assert!(length <= u16::MAX as usize);
                 self.buf[self.len_offset..=self.len_offset + 1]
-                    .copy_from_slice(&length.to_be_bytes());
+                    .copy_from_slice(&(length as u16).to_be_bytes());
             }
             ListLength::u24 { max, error: _ } => {
                 let length = (self.buf.len() - self.len_offset - 3) as u32;
                 debug_assert!(length <= max as u32);
+
                 self.buf[self.len_offset..=self.len_offset + 2]
                     .copy_from_slice(&length.to_be_bytes()[1..]);
             }

@@ -3,9 +3,10 @@ use crate::error::Error;
 use crate::message::enums::{SignatureAlgorithm, SignatureScheme};
 use ring::signature::{RsaEncoding, RsaKeyPair};
 use rustls_pki_types::PrivateKeyDer;
+use std::fmt::Debug;
 use std::sync::Arc;
 
-pub trait SigningKey {
+pub trait SigningKey: Debug {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
     fn algorithm(&self) -> SignatureAlgorithm;
 }
@@ -23,6 +24,7 @@ pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>
     Err(Error::General("Unsupported key type"))
 }
 
+#[derive(Debug)]
 pub struct RSASigningKey {
     key: Arc<RsaKeyPair>,
 }
