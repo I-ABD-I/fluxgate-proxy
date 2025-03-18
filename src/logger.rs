@@ -9,9 +9,9 @@ use log4rs::Config;
 use std::mem;
 
 fn file_logger(builders: &mut [LoggerBuilder], config: &mut ConfigBuilder) -> anyhow::Result<()> {
-    for i in 0..builders.len() {
-        builders[i] = mem::take(&mut builders[i]).appender("file");
-    }
+    builders
+        .iter_mut()
+        .for_each(|builder| *builder = mem::take(builder).appender("file"));
 
     let now = Local::now();
     let file = FileAppender::builder()
@@ -25,7 +25,6 @@ fn file_logger(builders: &mut [LoggerBuilder], config: &mut ConfigBuilder) -> an
 }
 
 pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<()> {
-    let now = Local::now();
     let console = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new(
             "{d(%Y-%m-%d %H:%M:%S)} {h({l})} [{h({t})}] {m}{n}",
