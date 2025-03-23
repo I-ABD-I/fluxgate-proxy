@@ -7,3 +7,4 @@ edition = "2021"
 ring = "0.17.8"
 rustls-pki-types = { version = "1.10.1", features = ["std"] }
 log = "0.4.25"
+futures = { version = "0.3.31", features = ["std"] }

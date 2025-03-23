@@ -16,8 +16,8 @@ use crate::message::enums::{
 };
 use crate::message::hs::{
     CertificateChain, ClientECDHParams, ClientHelloPayload, Random, ServerECDHParams,
-    ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangePayload, SessionID,
-    SignatureAndHashAlgorithm,
+    ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangePayload, ServerName,
+    ServerNamePayload, SessionID, SignatureAndHashAlgorithm,
 };
 use crate::verify::DigitalySinged;
 use crate::{
@@ -76,7 +76,7 @@ impl ExpectClientHello {
             let client_hello = ClientHello {
                 server_name: &None, // TODO: CHANGE THIS
                 sigschemes: &sig,
-                cipher_suites: &client_suites,
+                cipher_suites: &client_hello.cipher_suites,
             };
 
             self.config.cert_resolver.resolve(client_hello).unwrap()
@@ -159,17 +159,40 @@ impl ExpectClientHello {
 pub struct ClientHello<'a> {
     pub(crate) server_name: &'a Option<DnsName<'a>>,
     pub(crate) sigschemes: &'a [SignatureScheme],
-    pub(crate) cipher_suites: &'a [SupportedCipherSuite],
+    pub(crate) cipher_suites: &'a [CipherSuite],
+}
+
+impl ClientHello<'_> {
+    pub fn sni(&self) -> &Option<DnsName> {
+        self.server_name
+    }
+}
+
+fn process_sni(sni: &[ServerName]) -> Option<DnsName<'_>> {
+    fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
+        if let ServerNamePayload::HostName(dns) = &name.payload {
+            Some(dns.borrow())
+        } else {
+            None
+        }
+    }
+
+    sni.iter().filter_map(only_dns_hostnames).next()
 }
 
 pub(crate) fn process_client_hello<'m>(
     message: &'m Message<'_>,
+    cx: &mut Context,
 ) -> Result<(&'m ClientHelloPayload, Vec<SignatureScheme>), Error> {
     let MessagePayload::HandshakePayload(HandshakePayload::ClientHello(client_hello)) =
         &message.payload
     else {
         return Err(Error::InappropriateHandshakeMessage);
     };
+
+    if let Some(sni) = client_hello.sni_extension() {
+        cx.state.sni = process_sni(sni).map(|sni| sni.to_lowercase_owned());
+    }
 
     let mut sig = client_hello.signature_algorithm().unwrap().to_owned();
     Ok((client_hello, sig))
@@ -181,7 +204,7 @@ impl State for ExpectClientHello {
         cx: &mut Context,
         message: Message<'_>,
     ) -> Result<Box<dyn State>, Error> {
-        let (client_hello, mut sig) = process_client_hello(&message)?;
+        let (client_hello, mut sig) = process_client_hello(&message, cx)?;
         self.with_certified_key(sig, client_hello, &message, cx)
     }
 }

@@ -30,7 +30,10 @@ pub struct Stream<'a, T> {
     sock: &'a mut T,
 }
 
-impl<T: io::Read + io::Write> Stream<'_, T> {
+impl<'a, T: io::Read + io::Write> Stream<'a, T> {
+    pub fn new(conn: &'a mut Connection, sock: &'a mut T) -> Self {
+        Self { conn, sock }
+    }
     fn complete_io(&mut self) -> io::Result<()> {
         if self.conn.is_handshaking() {
             self.conn.complete_io(self.sock)?;
