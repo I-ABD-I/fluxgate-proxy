@@ -7,6 +7,7 @@ pub mod config;
 mod connection;
 pub mod crypto;
 pub(crate) mod error;
+pub mod futures;
 mod hs_hash;
 pub(crate) mod message;
 mod record_layer;

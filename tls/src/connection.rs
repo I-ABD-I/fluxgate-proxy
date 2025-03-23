@@ -19,6 +19,7 @@ use crate::{
     state::{self, Context, State},
 };
 use log::{debug, error, warn};
+use rustls_pki_types::DnsName;
 use std::io::Write;
 use std::sync::Arc;
 use std::{
@@ -37,6 +38,7 @@ pub struct TlsState {
     has_seen_eof: bool,
     pub(crate) record_layer: RecordLayer,
     fragmenter: MessageFragmenter,
+    pub(crate) sni: Option<DnsName<'static>>,
 }
 
 pub(crate) enum KxState {
@@ -70,6 +72,7 @@ impl TlsState {
             has_seen_eof: false,
             record_layer: RecordLayer::new(),
             fragmenter: MessageFragmenter,
+            sni: None,
         }
     }
 
@@ -204,6 +207,17 @@ impl TlsState {
 
         error!("Received fatal alert {alert:?}");
         Err(Error::AlertReceived(alert.description))
+    }
+
+    pub(crate) fn check_no_bytes_state(&self) -> io::Result<()> {
+        match (self.has_received_close, self.has_seen_eof) {
+            (true, _) => Ok(()),
+            (false, true) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected EOF during handshake",
+            )),
+            (false, false) => Err(io::ErrorKind::WouldBlock.into()),
+        }
     }
 }
 
@@ -453,7 +467,7 @@ impl Connection {
     }
 
     #[inline]
-    fn process_new_packets(&mut self) -> Result<(), Error> {
+    pub(crate) fn process_new_packets(&mut self) -> Result<(), Error> {
         self.core
             .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
     }
