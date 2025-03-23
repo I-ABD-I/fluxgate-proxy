@@ -2,11 +2,11 @@ use crate::config::ServerConfig;
 use crate::connection::{ConnectionCore, TlsState, WriteTo};
 use crate::error::Error;
 use crate::message::enums::SignatureScheme;
-use crate::message::hs::{ClientHelloPayload, HandshakePayload, ServerName, ServerNamePayload};
+use crate::message::hs::{ClientHelloPayload, HandshakePayload};
 use crate::message::{Message, MessagePayload};
 use crate::server::Connection;
 use crate::state;
-use rustls_pki_types::DnsName;
+use crate::state::ClientHello;
 use std::io;
 use std::sync::Arc;
 
@@ -64,7 +64,7 @@ impl Acceptor {
         let mut cx = state::Context {
             state: &mut connection.tls_state,
         };
-        let sigschemes = match state::process_client_hello(&message) {
+        let sigschemes = match state::process_client_hello(&message, &mut cx) {
             Ok((_, sigschemes)) => sigschemes,
             Err(err) => return Err((err, AcceptedAlert::from(connection))),
         };
@@ -112,24 +112,16 @@ pub struct Accepted {
     signature_schemes: Vec<SignatureScheme>,
 }
 
-fn process_sni(sni: &[ServerName]) -> Option<DnsName<'_>> {
-    fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
-        if let ServerNamePayload::HostName(dns) = &name.payload {
-            Some(dns.borrow())
-        } else {
-            None
-        }
-    }
-
-    sni.iter().filter_map(only_dns_hostnames).next()
-}
-
 impl Accepted {
-    pub fn sni(&self) -> Option<DnsName<'_>> {
+    pub fn client_hello(&self) -> ClientHello<'_> {
         let payload = Self::client_hello_payload(&self.message);
-        let sni = payload.sni_extension();
+        let ch = ClientHello {
+            server_name: &self.connection.sni,
+            sigschemes: &self.signature_schemes,
+            cipher_suites: &payload.cipher_suites,
+        };
 
-        sni.map(process_sni).unwrap_or(None)
+        ch
     }
 
     fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
