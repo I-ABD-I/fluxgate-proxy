@@ -139,7 +139,7 @@ where
             }
         }
 
-        if self.session.received_plaintext.len() > 0 {
+        if !self.session.received_plaintext.is_empty() {
             Poll::Ready(Ok(&self.session.received_plaintext))
         } else {
             match self.session.check_no_bytes_state() {
@@ -157,7 +157,7 @@ where
     }
 }
 
-impl<'a, IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<'a, IO> {
+impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<'_, IO> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -171,7 +171,7 @@ impl<'a, IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<'a, IO> {
     }
 }
 
-impl<'a, IO: AsyncRead + AsyncWrite + Unpin> AsyncBufRead for Stream<'a, IO> {
+impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncBufRead for Stream<'_, IO> {
     fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         let this = self.get_mut();
         Stream {
@@ -187,7 +187,7 @@ impl<'a, IO: AsyncRead + AsyncWrite + Unpin> AsyncBufRead for Stream<'a, IO> {
         self.session.received_plaintext.drain(0..amt);
     }
 }
-impl<'a, IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<'a, IO> {
+impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<'_, IO> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

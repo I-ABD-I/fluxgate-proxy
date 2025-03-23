@@ -3,9 +3,8 @@ mod controller;
 mod logger;
 
 use clap::Parser;
-use std::io::Write;
 use std::sync::Arc;
-use std::{fs, io::Read, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -29,7 +28,7 @@ use tls::server::Acceptor;
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    create_logger(cli.verbose)?;
+    create_logger(cli.verbose, false)?;
 
     // panics, cannot run without proper config
     let cfg = ron::from_str::<Vec<config::Server>>(&fs::read_to_string(&cli.config)?)?;
@@ -63,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
         let len = stream.read(&mut buf).await?;
         info!("{}", String::from_utf8(buf[..len].to_vec())?);
 
-        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 1313\r\nConnection: close\r\n\r\n").await?;
+        stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 1313\r\nConnection: close\r\n\r\n").await?;
 
         stream
             .write(

@@ -115,13 +115,11 @@ pub struct Accepted {
 impl Accepted {
     pub fn client_hello(&self) -> ClientHello<'_> {
         let payload = Self::client_hello_payload(&self.message);
-        let ch = ClientHello {
+         ClientHello {
             server_name: &self.connection.sni,
             sigschemes: &self.signature_schemes,
             cipher_suites: &payload.cipher_suites,
-        };
-
-        ch
+        }
     }
 
     fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
