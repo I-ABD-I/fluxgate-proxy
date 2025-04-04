@@ -1,21 +1,41 @@
 use crate::error::InvalidMessage;
 use std::fmt;
+
+/// Represents a reader for a byte buffer.
 pub struct Reader<'a> {
     buffer: &'a [u8],
     cursor: usize,
 }
 
 impl<'a> Reader<'a> {
+    /// Creates a new `Reader` with the given buffer.
+    ///
+    /// # Arguments
+    /// * `buffer` - The byte buffer to read from.
+    ///
+    /// # Returns
+    /// * `Self` - The new `Reader` instance.
     pub fn new(buffer: &'a [u8]) -> Self {
         Reader { buffer, cursor: 0 }
     }
 
+    /// Returns the remaining bytes in the buffer.
+    ///
+    /// # Returns
+    /// * `&'a [u8]` - The remaining bytes.
     pub fn rest(&mut self) -> &'a [u8] {
         let rest = &self.buffer[self.cursor..];
         self.cursor = self.buffer.len();
         rest
     }
 
+    /// Takes a slice of the specified length from the buffer.
+    ///
+    /// # Arguments
+    /// * `length` - The length of the slice to take.
+    ///
+    /// # Returns
+    /// * `Option<&'a [u8]>` - The slice if available, otherwise `None`.
     pub fn take(&mut self, length: usize) -> Option<&'a [u8]> {
         if self.left() < length {
             return None;
@@ -25,14 +45,29 @@ impl<'a> Reader<'a> {
         Some(&self.buffer[curr..self.cursor])
     }
 
+    /// Returns the number of bytes used so far.
+    ///
+    /// # Returns
+    /// * `usize` - The number of bytes used.
     pub fn used(&self) -> usize {
         self.cursor
     }
 
+    /// Returns the number of bytes left in the buffer.
+    ///
+    /// # Returns
+    /// * `usize` - The number of bytes left.
     pub fn left(&self) -> usize {
         self.buffer.len() - self.cursor
     }
 
+    /// Ensures the buffer is empty, otherwise returns an error.
+    ///
+    /// # Arguments
+    /// * `name` - The name of the buffer.
+    ///
+    /// # Returns
+    /// * `Result<(), InvalidMessage>` - `Ok` if empty, otherwise an error.
     pub fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
         if self.left() == 0 {
             Ok(())
@@ -41,6 +76,13 @@ impl<'a> Reader<'a> {
         }
     }
 
+    /// Takes a slice of the specified length and returns a new `Reader` for it.
+    ///
+    /// # Arguments
+    /// * `length` - The length of the slice.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The new `Reader` or an error.
     pub fn slice(&mut self, length: usize) -> Result<Self, InvalidMessage> {
         match self.take(length) {
             Some(buf) => Ok(Self::new(buf)),
@@ -49,9 +91,27 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// Trait for encoding and decoding data in the TLS protocol.
 pub trait Codec<'a>: Sized {
+    /// Encodes the data into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>);
+
+    /// Reads and decodes data from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded data or an error.
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
+
+    /// Returns the encoded data as a byte vector.
+    ///
+    /// # Returns
+    /// * `Vec<u8>` - The encoded data.
     fn get_encoding(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         self.encode(&mut bytes);
@@ -83,6 +143,7 @@ impl Codec<'_> for u16 {
     }
 }
 
+/// Represents a 24-bit unsigned integer.
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub struct u24(pub u32);
@@ -132,6 +193,7 @@ impl Codec<'_> for u64 {
     }
 }
 
+/// Represents a length-prefixed buffer.
 pub(crate) struct LengthPrefixedBuffer<'a> {
     pub(crate) buf: &'a mut Vec<u8>,
     size_len: ListLength,
@@ -139,6 +201,14 @@ pub(crate) struct LengthPrefixedBuffer<'a> {
 }
 
 impl<'a> LengthPrefixedBuffer<'a> {
+    /// Creates a new `LengthPrefixedBuffer` with the given size length and buffer.
+    ///
+    /// # Arguments
+    /// * `size_len` - The size length of the buffer.
+    /// * `buf` - The buffer to use.
+    ///
+    /// # Returns
+    /// * `Self` - The new `LengthPrefixedBuffer` instance.
     pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
         let offset = buf.len();
         buf.extend(match size_len {
@@ -181,12 +251,15 @@ impl Drop for LengthPrefixedBuffer<'_> {
     }
 }
 
+/// Represents the length of a list.
 #[allow(non_camel_case_types)]
 pub enum ListLength {
     u8,
     u16,
     u24 { max: usize, error: InvalidMessage },
 }
+
+/// Trait for elements in a TLS list.
 pub trait TLSListElement {
     const LENGHT_SIZE: ListLength;
 }
@@ -197,7 +270,6 @@ where
 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         // length is the byte slice length and not the vec length
-
         let nest = LengthPrefixedBuffer::new(T::LENGHT_SIZE, bytes);
         for i in self {
             i.encode(nest.buf);
@@ -224,10 +296,13 @@ where
     }
 }
 
+/// Puts a 64-bit unsigned integer into a byte slice.
 pub fn put_u64(v: u64, slice: &mut [u8]) {
     let mut bytes: &mut [u8; 8] = (&mut slice[..8]).try_into().unwrap();
     *bytes = v.to_be_bytes();
 }
+
+/// Puts a 16-bit unsigned integer into a byte slice.
 pub(crate) fn put_u16(v: u16, out: &mut [u8]) {
     let out: &mut [u8; 2] = (&mut out[..2]).try_into().unwrap();
     *out = u16::to_be_bytes(v);

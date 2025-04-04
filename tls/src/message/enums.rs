@@ -5,6 +5,7 @@ use crate::crypto;
 use crate::error::InvalidMessage;
 
 enum_builder! {
+/// Represents the protocol version in TLS.
     #[repr(u16)]
     pub enum ProtocolVersion {
         SSLv2 => 0x0200,
@@ -20,6 +21,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the content type in TLS.
     #[repr(u8)]
     pub enum ContentType {
         ChangeCipherSpec => 20,
@@ -30,6 +32,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the cipher suite in TLS.
     #[repr(u16)]
     pub enum CipherSuite {
         TLS_NULL_WITH_NULL_NULL => 0x0000,
@@ -90,6 +93,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the compression method in TLS.
     #[repr(u8)]
     pub enum CompressionMethod {
         Null => 0
@@ -97,6 +101,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the extension type in TLS.
     #[repr(u16)]
     pub enum ExtensionType {
         ServerName => 0,
@@ -109,6 +114,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the hash algorithm in TLS.
     #[repr(u8)]
     pub enum HashAlgorithm {
         none => 0,
@@ -123,6 +129,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the signature algorithm in TLS.
     #[repr(u8)]
     pub enum SignatureAlgorithm {
         anonymous => 0,
@@ -134,6 +141,7 @@ enum_builder! {
 }
 
 enum_builder! {
+/// Represents the key exchange algorithm in TLS.
     #[repr(u8)]
     pub enum KeyExchangeAlgorithm {
         dhe_dss => 0,
@@ -144,7 +152,9 @@ enum_builder! {
         dh_rsa => 5,
     }
 }
+
 enum_builder! {
+/// Represents the named curve in TLS.
     #[repr(u16)]
     pub enum NamedCurve {
         secp256r1 => 23,
@@ -220,11 +230,11 @@ enum_builder! {
         RSA_PSS_SHA256 => 0x0804,
         RSA_PSS_SHA384 => 0x0805,
         RSA_PSS_SHA512 => 0x0806,
-
     }
 }
 
 impl SignatureScheme {
+    /// Returns the signature algorithm associated with this `SignatureScheme`.
     pub(crate) fn algorithm(&self) -> SignatureAlgorithm {
         match *self {
             Self::RSA_PKCS1_SHA1
@@ -238,7 +248,6 @@ impl SignatureScheme {
             | Self::ECDSA_NISTP256_SHA256
             | Self::ECDSA_NISTP384_SHA384
             | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ecdsa,
-
             _ => SignatureAlgorithm::Unknown(0),
         }
     }
