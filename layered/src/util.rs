@@ -1,4 +1,5 @@
 use super::{layer::Layer, service::Service};
+use std::future::Future;
 
 pub struct Identity;
 impl<S> Layer<S> for Identity {
@@ -40,17 +41,17 @@ pub enum Either<A, B> {
 
 impl<A, B, Request> Service<Request> for Either<A, B>
 where
-    A: Service<Request>,
-    B: Service<Request, Response = A::Response, Error = A::Error>,
+    A: Service<Request> + Send,
+    B: Service<Request, Response = A::Response, Error = A::Error> + Send, Request: Send
 {
     type Response = A::Response;
 
     type Error = A::Error;
 
-    fn call(&mut self, req: Request) -> Result<Self::Response, Self::Error> {
+    async fn call(&mut self, req: Request) -> Result<Self::Response, Self::Error> {
         match self {
-            Either::Left(a) => a.call(req),
-            Either::Right(b) => b.call(req),
+            Either::Left(a) => a.call(req).await,
+            Either::Right(b) => b.call(req).await,
         }
     }
 }
@@ -65,15 +66,16 @@ impl<T> ServiceFn<T> {
     }
 }
 
-impl<T, Request, R, E> Service<Request> for ServiceFn<T>
+impl<T, F, Request, R, E> Service<Request> for ServiceFn<T>
 where
-    T: FnMut(Request) -> Result<R, E>,
+    T: FnMut(Request) -> F + Send,
+    F: Future<Output = Result<R, E>> + Send, Request: Send
 {
     type Response = R;
 
     type Error = E;
 
-    fn call(&mut self, req: Request) -> Result<Self::Response, Self::Error> {
-        (self.f)(req)
+    async fn call(&mut self, req: Request) -> Result<Self::Response, Self::Error> {
+        (self.f)(req).await
     }
 }

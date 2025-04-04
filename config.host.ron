@@ -1,0 +1,16 @@
+#![enable(implicit_some)]
+
+[
+    Server(
+        server_name: "clicker.local",
+        ssl: SSLConfig (
+            ssl_certificate: "certificates/clicker-cert.pem",
+            ssl_certificate_key: "certificates/clicker-key.pem",
+        ),
+        upstreams: ["127.0.0.1:3000"]
+    ),
+    Server(
+        server_name: "heavy.local",
+        upstreams: ["127.0.0.1:3001"]
+    ),
+]

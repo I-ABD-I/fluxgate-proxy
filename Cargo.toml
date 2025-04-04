@@ -16,3 +16,5 @@ serde = { version = "1.0.215", features = ["derive"] }
 tls = { path = "./tls" }
 async-std = { version = "1.13.1", features = ["attributes"] }
 chrono = "0.4.40"
+futures = "0.3.31"
+thiserror = "2.0.12"

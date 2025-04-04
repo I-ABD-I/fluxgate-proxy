@@ -1,5 +1,0 @@
-[Server(
-    listen: 80,
-    server_name: "clicker.local",
-    upstreams: [(addr: "127.0.0.1:3000")]
-)]
