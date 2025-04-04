@@ -108,7 +108,9 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     let mut server_stream = TcpStream::connect(server_addr).await?;
-    server_stream.write(&early_data[..early_data.len()]).await?;
+    server_stream
+        .write_all(&early_data[..early_data.len()])
+        .await?;
 
     loop {
         let mut buf_client = [0u8; 4096];
@@ -121,7 +123,7 @@ where
                     debug!("Connection Closed");
                     break;
                 };
-                server_stream.write(&buf_client[..len]).await?;
+                server_stream.write_all(&buf_client[..len]).await?;
             },
             res = server_stream.read(&mut buf_server).fuse() => {
                 let len = res?;
@@ -129,7 +131,7 @@ where
                     debug!("Connection Closed");
                     break;
                 };
-                transport.write(&buf_server[..len]).await?;
+                transport.write_all(&buf_server[..len]).await?;
             },
         }
     }

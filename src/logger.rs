@@ -47,7 +47,7 @@ pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<
         )))
         .build();
 
-    let tls_logger_level = if (verbose) {
+    let tls_logger_level = if verbose {
         LevelFilter::Debug
     } else {
         LevelFilter::Info
@@ -60,7 +60,7 @@ pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<
 
     let mut loggers = [fluxgate_logger, tls_logger];
 
-    if (log_to_file) {
+    if log_to_file {
         file_logger(&mut loggers, &mut config)?;
     }
 
