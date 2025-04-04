@@ -17,16 +17,22 @@ use tls::config::ServerConfig;
 use tls::pki_types::pem::PemObject;
 use tls::pki_types::{CertificateDer, PrivateKeyDer};
 
+/// Command-line interface structure for parsing arguments.
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Cli {
     /// Sets a custom config file
     #[arg(short, long, default_value = "config.ron")]
     config: PathBuf,
+    /// Enables verbose logging
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 }
 
+/// Main entry point of the application.
+///
+/// # Returns
+/// An `anyhow::Result` indicating the success or failure of the operation.
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -58,6 +64,13 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Builds the TLS configuration.
+///
+/// # Arguments
+/// * `iter` - An iterator over tuples of DNS names and SSL configurations.
+///
+/// # Returns
+/// An `anyhow::Result` containing the `ServerConfig`.
 fn build_tls_config<'a>(
     iter: impl Iterator<Item = (&'a String, &'a SSLConfig)>,
 ) -> anyhow::Result<ServerConfig> {

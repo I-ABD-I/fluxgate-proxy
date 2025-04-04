@@ -8,6 +8,14 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::Config;
 use std::mem;
 
+/// Configures a file logger by modifying the provided logger builders and configuration.
+///
+/// # Arguments
+/// * `builders` - A mutable slice of `LoggerBuilder` instances to be configured.
+/// * `config` - A mutable reference to a `ConfigBuilder` to be updated with the file appender.
+///
+/// # Returns
+/// An `anyhow::Result` indicating the success or failure of the operation.
 fn file_logger(builders: &mut [LoggerBuilder], config: &mut ConfigBuilder) -> anyhow::Result<()> {
     builders
         .iter_mut()
@@ -24,6 +32,14 @@ fn file_logger(builders: &mut [LoggerBuilder], config: &mut ConfigBuilder) -> an
     Ok(())
 }
 
+/// Creates and initializes the logger configuration.
+///
+/// # Arguments
+/// * `verbose` - A boolean indicating whether verbose logging should be enabled.
+/// * `log_to_file` - A boolean indicating whether logs should be written to a file.
+///
+/// # Returns
+/// An `anyhow::Result` indicating the success or failure of the operation.
 pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<()> {
     let console = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new(
@@ -31,7 +47,7 @@ pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<
         )))
         .build();
 
-    let tls_logger_level = if verbose {
+    let tls_logger_level = if (verbose) {
         LevelFilter::Debug
     } else {
         LevelFilter::Info
@@ -44,7 +60,7 @@ pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<
 
     let mut loggers = [fluxgate_logger, tls_logger];
 
-    if log_to_file {
+    if (log_to_file) {
         file_logger(&mut loggers, &mut config)?;
     }
 
