@@ -28,26 +28,42 @@ use std::{
 };
 
 // don't need version, only supporting 1.2
+/// Represents the state of a TLS connection.
 pub struct TlsState {
+    /// Indicates if application data can be sent.
     may_send_appdata: bool,
+    /// Indicates if application data can be received.
     may_recv_appdata: bool,
+    /// Buffer for sendable TLS data.
     pub(crate) sendable_tls: Vec<u8>,
+    /// Buffer for received plaintext data.
     pub(crate) received_plaintext: Vec<u8>,
+    /// Indicates if a close notification has been received.
     has_received_close: bool,
+    /// Key exchange state.
     pub(crate) kx_state: KxState,
+    /// Indicates if EOF has been seen.
     has_seen_eof: bool,
+    /// Record layer for managing TLS records.
     pub(crate) record_layer: RecordLayer,
+    /// Fragmenter for handling message fragmentation.
     fragmenter: MessageFragmenter,
+    /// Server Name Indication (SNI) value.
     pub(crate) sni: Option<DnsName<'static>>,
 }
 
+/// Represents the state of key exchange.
 pub(crate) enum KxState {
+    /// No key exchange.
     None,
+    /// Key exchange started with the specified group.
     Start(&'static dyn SupportedKxGroup),
+    /// Key exchange completed with the specified group.
     Done(&'static dyn SupportedKxGroup),
 }
 
 impl KxState {
+    /// Marks the key exchange as done.
     pub(crate) fn done(&mut self) {
         if let Self::Start(group) = self {
             *self = Self::Done(*group);
@@ -56,11 +72,14 @@ impl KxState {
 }
 
 impl Default for TlsState {
+    /// Creates a new `TlsState` with default values.
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl TlsState {
+    /// Creates a new `TlsState`.
     pub fn new() -> Self {
         Self {
             may_send_appdata: false,
@@ -76,24 +95,52 @@ impl TlsState {
         }
     }
 
+    /// Checks if the connection is in the handshaking state.
+    ///
+    /// # Returns
+    /// `true` if handshaking, `false` otherwise.
     pub(crate) fn is_handshaking(&self) -> bool {
         !(self.may_recv_appdata && self.may_send_appdata)
     }
 
+    /// Checks if the connection wants to write data.
+    ///
+    /// # Returns
+    /// `true` if there is data to write, `false` otherwise.
     pub(crate) fn wants_write(&self) -> bool {
         !self.sendable_tls.is_empty()
     }
 
+    /// Checks if the connection wants to read data.
+    ///
+    /// # Returns
+    /// `true` if there is data to read, `false` otherwise.
     pub(crate) fn wants_read(&self) -> bool {
         self.received_plaintext.is_empty()
             && !self.has_received_close
             && (self.may_send_appdata || self.sendable_tls.is_empty())
     }
 
+    /// Writes TLS data to the given writer.
+    ///
+    /// # Arguments
+    /// * `wr` - The writer to write to.
+    ///
+    /// # Returns
+    /// The number of bytes written or an error.
     pub(crate) fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
     }
 
+    /// Processes the main protocol logic.
+    ///
+    /// # Arguments
+    /// * `message` - The message to process.
+    /// * `state` - The current state.
+    /// * `sendable_plaintext` - The buffer for sendable plaintext.
+    ///
+    /// # Returns
+    /// The next state or an error.
     fn process_main_protocol(
         &mut self,
         message: Message<'_>,
@@ -117,16 +164,29 @@ impl TlsState {
         }
     }
 
+    /// Starts encryption with the given connection secrets.
+    ///
+    /// # Arguments
+    /// * `secrets` - The connection secrets.
     pub(crate) fn start_encryption(&mut self, secrets: &ConnectionSecrets) {
         let (dec, enc) = secrets.make_cipher_pair();
         self.record_layer.prepare_encrypter(enc);
         self.record_layer.prepare_decrypter(dec);
     }
 
+    /// Queues a TLS message for sending.
+    ///
+    /// # Arguments
+    /// * `msg` - The message to queue.
     fn queue_tls_message(&mut self, msg: OutboundOpaqueMessage) {
         self.sendable_tls.append(&mut msg.encode())
     }
 
+    /// Sends a TLS message.
+    ///
+    /// # Arguments
+    /// * `msg` - The message to send.
+    /// * `must_encrypt` - Indicates if the message must be encrypted.
     pub fn send_message(&mut self, msg: Message<'_>, must_encrypt: bool) {
         if !must_encrypt {
             self.fragmenter
@@ -140,16 +200,34 @@ impl TlsState {
             .for_each(|fragment| self.send_single_fragment(fragment));
     }
 
+    /// Sends a single fragment of a TLS message.
+    ///
+    /// # Arguments
+    /// * `m` - The fragment to send.
     fn send_single_fragment(&mut self, m: OutboundPlainMessage<'_>) {
         let em = self.record_layer.encrypt(m);
         self.queue_tls_message(em);
     }
 
+    /// Sends plaintext data.
+    ///
+    /// # Arguments
+    /// * `sendable_plaintext` - The plaintext data to send.
+    ///
+    /// # Returns
+    /// The number of bytes sent.
     pub fn send_plain(&mut self, sendable_plaintext: &[u8]) -> usize {
         // not buffering for now;
         self.send_plain_non_buffering(sendable_plaintext)
     }
 
+    /// Sends plaintext data without buffering.
+    ///
+    /// # Arguments
+    /// * `payload` - The plaintext data to send.
+    ///
+    /// # Returns
+    /// The number of bytes sent.
     fn send_plain_non_buffering(&mut self, payload: &[u8]) -> usize {
         if payload.is_empty() {
             return 0;
@@ -158,6 +236,13 @@ impl TlsState {
         self.send_appdata_encrypt(payload)
     }
 
+    /// Encrypts and sends application data.
+    ///
+    /// # Arguments
+    /// * `payload` - The application data to send.
+    ///
+    /// # Returns
+    /// The number of bytes sent.
     fn send_appdata_encrypt(&mut self, payload: &[u8]) -> usize {
         self.fragmenter
             .fragment_payload(
@@ -169,17 +254,30 @@ impl TlsState {
         payload.len()
     }
 
+    /// Starts the traffic flow.
     pub(crate) fn start_traffic(&mut self) {
         self.may_recv_appdata = true;
         self.may_send_appdata = true;
     }
 
+    /// Sends a warning alert.
+    ///
+    /// # Arguments
+    /// * `description` - The alert description.
     pub fn send_warning(&mut self, description: AlertDescription) {
         warn!("Sending warning: {description:?}");
         let msg = Message::build_alert(AlertLevel::Warning, description);
         self.send_message(msg, self.record_layer.should_encrypt());
     }
 
+    /// Sends a fatal alert and returns an error.
+    ///
+    /// # Arguments
+    /// * `description` - The alert description.
+    /// * `err` - The error to send.
+    ///
+    /// # Returns
+    /// The error.
     pub fn send_fatal(&mut self, description: AlertDescription, err: impl Into<Error>) -> Error {
         error!("Sending error: {description:?}");
         let m = Message::build_alert(AlertLevel::Fatal, description);
@@ -187,6 +285,13 @@ impl TlsState {
         err.into()
     }
 
+    /// Processes an alert message.
+    ///
+    /// # Arguments
+    /// * `alert` - The alert payload.
+    ///
+    /// # Returns
+    /// `Ok` if the alert was processed successfully, otherwise an error.
     fn process_alert(&mut self, alert: &AlertPayload) -> Result<(), Error> {
         if let AlertLevel::Unknown(_) = alert.level {
             return Err(self.send_fatal(
@@ -209,6 +314,10 @@ impl TlsState {
         Err(Error::AlertReceived(alert.description))
     }
 
+    /// Checks the state of the connection when no bytes are available.
+    ///
+    /// # Returns
+    /// `Ok` if the state is valid, otherwise an error.
     pub(crate) fn check_no_bytes_state(&self) -> io::Result<()> {
         match (self.has_received_close, self.has_seen_eof) {
             (true, _) => Ok(()),
@@ -220,14 +329,24 @@ impl TlsState {
         }
     }
 }
-
 // ONLY IMPLEMENTING SERVERSIDE TLS
+/// Represents the core of a TLS connection.
 pub struct ConnectionCore {
+    /// The current state of the connection.
     state: Result<Box<dyn State>, Error>,
+    /// The TLS state.
     pub(crate) tls_state: TlsState,
 }
 
 impl ConnectionCore {
+    /// Creates a new `ConnectionCore`.
+    ///
+    /// # Arguments
+    /// * `state` - The initial state of the connection.
+    /// * `tls_state` - The TLS state.
+    ///
+    /// # Returns
+    /// A new `ConnectionCore` instance.
     pub fn new(state: Box<dyn State>, tls_state: TlsState) -> Self {
         Self {
             state: Ok(state),
@@ -235,6 +354,14 @@ impl ConnectionCore {
         }
     }
 
+    /// Processes new packets from the deframer.
+    ///
+    /// # Arguments
+    /// * `deframer` - The deframer buffer.
+    /// * `sendable_plaintext` - The buffer for sendable plaintext.
+    ///
+    /// # Returns
+    /// `Ok(())` if successful, otherwise an error.
     fn process_new_packets(
         &mut self,
         deframer: &mut VecDeframerBuffer,
@@ -281,6 +408,13 @@ impl ConnectionCore {
         Ok(())
     }
 
+    /// Deframes a buffer into a message.
+    ///
+    /// # Arguments
+    /// * `buffer` - The buffer to deframe.
+    ///
+    /// # Returns
+    /// An optional tuple containing the inbound plain message and its size, or an error.
     fn deframe<'b>(
         &mut self,
         buffer: &'b mut [u8],
@@ -315,6 +449,15 @@ impl ConnectionCore {
         Ok(Some((message, iter.consumed())))
     }
 
+    /// Processes a message.
+    ///
+    /// # Arguments
+    /// * `msg` - The inbound plain message.
+    /// * `state` - The current state.
+    /// * `sendable_plaintext` - The buffer for sendable plaintext.
+    ///
+    /// # Returns
+    /// The next state or an error.
     fn process_msg(
         &mut self,
         msg: InboundPlainMessage,
@@ -334,6 +477,13 @@ impl ConnectionCore {
         self.process_main_protocol(msg, state, sendable_plaintext)
     }
 
+    /// Handles deframe errors.
+    ///
+    /// # Arguments
+    /// * `err` - The error to handle.
+    ///
+    /// # Returns
+    /// The handled error.
     fn handle_deframe_error(&mut self, err: Error) -> Error {
         match err {
             Error::InvalidMessage(err) => self.send_fatal(AlertDescription::DecodeError, err),
@@ -360,13 +510,24 @@ impl DerefMut for ConnectionCore {
     }
 }
 
+/// Represents a TLS connection.
 pub struct Connection {
+    /// The core of the connection.
     pub(crate) core: ConnectionCore,
+    /// The deframer buffer.
     deframer_buffer: VecDeframerBuffer,
+    /// The buffer for sendable plaintext.
     sendable_plaintext: Vec<u8>,
 }
 
 impl From<ConnectionCore> for Connection {
+    /// Creates a `Connection` from a `ConnectionCore`.
+    ///
+    /// # Arguments
+    /// * `core` - The connection core.
+    ///
+    /// # Returns
+    /// A new `Connection` instance.
     fn from(core: ConnectionCore) -> Self {
         Self {
             core,
@@ -391,6 +552,13 @@ impl DerefMut for Connection {
 }
 
 impl Connection {
+    /// Creates a new `Connection`.
+    ///
+    /// # Arguments
+    /// * `config` - The server configuration.
+    ///
+    /// # Returns
+    /// A new `Connection` instance.
     pub fn new(config: Arc<ServerConfig>) -> Self {
         ConnectionCore::new(
             Box::new(state::ExpectClientHello::new(config)),
@@ -399,6 +567,13 @@ impl Connection {
         .into()
     }
 
+    /// Reads TLS data from the given reader.
+    ///
+    /// # Arguments
+    /// * `r` - The reader to read from.
+    ///
+    /// # Returns
+    /// The number of bytes read or an error.
     pub(crate) fn read_tls(&mut self, r: &mut dyn io::Read) -> io::Result<usize> {
         let res = self.deframer_buffer.read(r, self.is_handshaking());
         if let Ok(0) = res {
@@ -407,6 +582,13 @@ impl Connection {
         res
     }
 
+    /// Completes I/O operations for the connection.
+    ///
+    /// # Arguments
+    /// * `io` - The I/O object to read from and write to.
+    ///
+    /// # Returns
+    /// A tuple containing the number of bytes read and written, or an error.
     pub(crate) fn complete_io<T: io::Read + io::Write>(
         &mut self,
         io: &mut T,
@@ -466,12 +648,20 @@ impl Connection {
         }
     }
 
+    /// Processes new packets.
+    ///
+    /// # Returns
+    /// `Ok(())` if successful, otherwise an error.
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<(), Error> {
         self.core
             .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
     }
 
+    /// Retrieves the first handshake message.
+    ///
+    /// # Returns
+    /// An optional handshake message or an error.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message<'static>>, Error> {
         let (res) = self
             .core
@@ -487,15 +677,36 @@ impl Connection {
             None => Ok(None),
         }
     }
+
+    /// Replaces the current state with a new state.
+    ///
+    /// # Arguments
+    /// * `state` - The new state.
     pub(crate) fn replace_state(&mut self, state: Box<dyn State>) {
         self.core.state = Ok(state);
     }
 }
 
+/// Trait for writing data to an I/O object.
 pub trait WriteTo {
+    /// Writes data to the given writer.
+    ///
+    /// # Arguments
+    /// * `wr` - The writer to write to.
+    ///
+    /// # Returns
+    /// The number of bytes written or an error.
     fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize>;
 }
+
 impl WriteTo for Vec<u8> {
+    /// Writes data from the vector to the given writer.
+    ///
+    /// # Arguments
+    /// * `wr` - The writer to write to.
+    ///
+    /// # Returns
+    /// The number of bytes written or an error.
     fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         match wr.write(self) {
             Ok(len) => {

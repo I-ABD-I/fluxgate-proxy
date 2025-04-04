@@ -13,9 +13,16 @@ use std::sync::Arc;
 use std::task::{ready, Context, Poll};
 use std::{io, mem};
 
+/// A structure representing a stream.
+///
+/// This structure contains a mutable reference to an I/O object and a mutable reference to a TLS connection session.
+/// It also keeps track of whether the end-of-file (EOF) has been reached.
 pub struct Stream<'a, IO> {
+    /// A mutable reference to the I/O object.
     pub(crate) io: &'a mut IO,
+    /// A mutable reference to the TLS connection session.
     pub(crate) session: &'a mut Connection,
+    /// A boolean indicating whether the end-of-file (EOF) has been reached.
     eof: bool,
 }
 
@@ -23,6 +30,16 @@ impl<'a, IO> Stream<'a, IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Creates a new `Stream` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `session` - A mutable reference to a `Connection`.
+    /// * `io` - A mutable reference to an I/O object.
+    ///
+    /// # Returns
+    ///
+    /// A new `Stream` instance.
     fn new(session: &'a mut Connection, io: &'a mut IO) -> Self {
         Self {
             io,
@@ -31,14 +48,38 @@ where
         }
     }
 
+    /// Sets the end-of-file (EOF) flag.
+    ///
+    /// # Arguments
+    ///
+    /// * `eof` - A boolean indicating whether the EOF has been reached.
+    ///
+    /// # Returns
+    ///
+    /// The `Stream` instance with the updated EOF flag.
     fn set_eof(mut self, eof: bool) -> Self {
         self.eof = eof;
         self
     }
 
+    /// Converts the `Stream` instance to a pinned mutable reference.
+    ///
+    /// # Returns
+    ///
+    /// A pinned mutable reference to the `Stream` instance.
     fn as_mut_pin(&mut self) -> Pin<&mut Self> {
         Pin::new(self)
     }
+
+    /// Reads data from the I/O object into the TLS session.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the read operation.
     pub fn read_io(&mut self, cx: &mut Context) -> Poll<io::Result<usize>> {
         let mut reader = ReadSyncConverter { io: self.io, cx };
         let n = match self.session.read_tls(&mut reader) {
@@ -55,6 +96,15 @@ where
         Poll::Ready(Ok(n))
     }
 
+    /// Writes data from the TLS session to the I/O object.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the write operation.
     pub fn write_io(&mut self, cx: &mut Context) -> Poll<io::Result<usize>> {
         let mut writer = WriteSyncConverter { io: self.io, cx };
         match self.session.write_tls(&mut writer) {
@@ -63,6 +113,15 @@ where
         }
     }
 
+    /// Performs the TLS handshake.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the handshake operation.
     pub fn handshake(&mut self, cx: &mut Context) -> Poll<io::Result<(usize, usize)>> {
         let mut wrlen = 0;
         let mut rdlen = 0;
@@ -124,6 +183,16 @@ where
             };
         }
     }
+
+    /// Fills the buffer with data from the TLS session.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the buffer fill operation.
     fn poll_fill_buf(mut self, cx: &mut Context<'_>) -> Poll<io::Result<&'a [u8]>> {
         let mut io_pending = false;
 
@@ -158,6 +227,16 @@ where
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<'_, IO> {
+    /// Polls to read data into the provided buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    /// * `buf` - A mutable slice of bytes to store the read data.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the read operation.
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -172,6 +251,15 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<'_, IO> {
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncBufRead for Stream<'_, IO> {
+    /// Polls to fill the buffer with data.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the buffer fill operation.
     fn poll_fill_buf(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         let this = self.get_mut();
         Stream {
@@ -183,11 +271,27 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncBufRead for Stream<'_, IO> {
         .poll_fill_buf(cx)
     }
 
+    /// Consumes the specified amount of data from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `amt` - The amount of data to consume.
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
         self.session.received_plaintext.drain(0..amt);
     }
 }
+
 impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<'_, IO> {
+    /// Polls to write data from the provided buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    /// * `buf` - A slice of bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the write operation.
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -219,6 +323,15 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<'_, IO> {
         Poll::Ready(Ok(buf.len()))
     }
 
+    /// Polls to flush the I/O object.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the flush operation.
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         while self.session.wants_write() {
             if ready!(self.write_io(cx))? == 0 {
@@ -228,6 +341,15 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<'_, IO> {
         Pin::new(&mut self.io).poll_flush(cx)
     }
 
+    /// Polls to close the I/O object.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the close operation.
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         while self.session.wants_write() {
             if ready!(self.write_io(cx))? == 0 {
@@ -243,14 +365,20 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<'_, IO> {
     }
 }
 
+/// Represents the state of a TLS connection.
 enum TlsState {
+    /// The connection is in a streaming state.
     Stream,
+    /// The read side of the connection is shut down.
     ReadShutdown,
+    /// The write side of the connection is shut down.
     WriteShutdown,
+    /// Both sides of the connection are shut down.
     Shutdown,
 }
 
 impl TlsState {
+    /// Shuts down the write side of the connection.
     fn shutdown_write(&mut self) {
         match self {
             TlsState::Stream => *self = TlsState::WriteShutdown,
@@ -258,6 +386,8 @@ impl TlsState {
             _ => (),
         }
     }
+
+    /// Shuts down the read side of the connection.
     fn shutdown_read(&mut self) {
         match self {
             TlsState::Stream => *self = TlsState::ReadShutdown,
@@ -265,17 +395,33 @@ impl TlsState {
             _ => (),
         }
     }
+
+    /// Checks if the connection is readable.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the connection is readable, `false` otherwise.
     fn readable(&self) -> bool {
-        !matches!(self, TlsState::ReadShutdown | TlsState::Shutdown)
+        !matches!(*self, TlsState::ReadShutdown | TlsState::Shutdown)
     }
 
+    /// Checks if the connection is writable.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the connection is writable, `false` otherwise.
     fn writeable(&self) -> bool {
         !matches!(self, TlsState::WriteShutdown | TlsState::Shutdown)
     }
 }
+
+/// A structure representing an owned stream with a TLS connection.
 pub struct StreamOwned<IO> {
+    /// The I/O object.
     pub(crate) io: IO,
+    /// The TLS connection session.
     pub(crate) session: ConnectionWrapper,
+    /// The state of the TLS connection.
     state: TlsState,
 }
 
@@ -283,6 +429,16 @@ impl<IO> AsyncRead for StreamOwned<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Polls to read data into the provided buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    /// * `buf` - A mutable slice of bytes to store the read data.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the read operation.
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -300,6 +456,15 @@ impl<IO> AsyncBufRead for StreamOwned<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Polls to fill the buffer with data.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the buffer fill operation.
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         match self.state {
             TlsState::Stream | TlsState::WriteShutdown => {
@@ -326,6 +491,11 @@ where
         }
     }
 
+    /// Consumes the specified amount of data from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `amt` - The amount of data to consume.
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
         self.session.received_plaintext.drain(0..amt);
     }
@@ -335,6 +505,16 @@ impl<IO> AsyncWrite for StreamOwned<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Polls to write data from the provided buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    /// * `buf` - A slice of bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the write operation.
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -346,6 +526,15 @@ where
         stream.as_mut_pin().poll_write(cx, buf)
     }
 
+    /// Polls to flush the I/O object.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the flush operation.
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
         let mut stream =
@@ -353,6 +542,15 @@ where
         stream.as_mut_pin().poll_flush(cx)
     }
 
+    /// Polls to close the I/O object.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the close operation.
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if self.state.writeable() {
             // TODO: Send close notify
@@ -365,10 +563,15 @@ where
         stream.as_mut_pin().poll_close(cx)
     }
 }
-
+/// A structure representing a lazy acceptor.
+///
+/// This structure contains an acceptor, an optional I/O object, and an optional alert.
 pub struct LazyAcceptor<IO> {
+    /// The acceptor.
     acceptor: Acceptor,
+    /// An optional I/O object.
     io: Option<IO>,
+    /// An optional alert containing an error and an accepted alert.
     alert: Option<(Error, AcceptedAlert)>,
 }
 
@@ -376,6 +579,16 @@ impl<IO> LazyAcceptor<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Creates a new `LazyAcceptor` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `acceptor` - The acceptor.
+    /// * `io` - The I/O object.
+    ///
+    /// # Returns
+    ///
+    /// A new `LazyAcceptor` instance.
     pub fn new(acceptor: Acceptor, io: IO) -> Self {
         Self {
             acceptor,
@@ -391,6 +604,15 @@ where
 {
     type Output = Result<StartHandshake<IO>, io::Error>;
 
+    /// Polls the lazy acceptor to progress the future.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the future.
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         loop {
@@ -441,22 +663,41 @@ where
         }
     }
 }
+
+/// A wrapper for a TLS connection.
 pub(crate) struct ConnectionWrapper(Connection);
 
 impl Deref for ConnectionWrapper {
     type Target = Connection;
+
+    /// Dereferences the connection wrapper to get the connection.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the connection.
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl DerefMut for ConnectionWrapper {
+    /// Dereferences the connection wrapper to get a mutable reference to the connection.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the connection.
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
+
+/// A structure representing the start of a handshake.
+///
+/// This structure contains the accepted connection and the I/O object.
 pub struct StartHandshake<IO> {
+    /// The accepted connection.
     accepted: Accepted,
+    /// The I/O object.
     io: IO,
 }
 
@@ -464,10 +705,24 @@ impl<IO> StartHandshake<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Returns the client hello message.
+    ///
+    /// # Returns
+    ///
+    /// The client hello message.
     pub fn client_hello(&self) -> ClientHello {
         self.accepted.client_hello()
     }
 
+    /// Converts the start handshake into a stream.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - A reference to the server configuration.
+    ///
+    /// # Returns
+    ///
+    /// An `Accept` instance.
     pub fn into_stream(self, config: Arc<ServerConfig>) -> Accept<IO> {
         let mut conn = match self.accepted.into_connection(config) {
             Ok(conn) => conn,
@@ -486,13 +741,37 @@ where
             state: TlsState::Stream,
         }))
     }
+    
+    /// Takes the I/O object.
+    ///
+    /// # Returns
+    ///
+    /// The I/O object.
+    pub fn take_io(self) -> IO {
+        self.io
+    }
 }
 
+/// A trait representing a session.
+///
+/// This trait provides methods to get mutable references to the state, I/O object, and session,
+/// and to convert the session into the I/O object.
 trait Session {
     type IO;
     type Session;
 
+    /// Gets mutable references to the state, I/O object, and session.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing mutable references to the state, I/O object, and session.
     fn get_mut(&mut self) -> (&mut TlsState, &mut Self::IO, &mut Self::Session);
+
+    /// Converts the session into the I/O object.
+    ///
+    /// # Returns
+    ///
+    /// The I/O object.
     fn into_io(self) -> Self::IO;
 }
 
@@ -500,25 +779,52 @@ impl<IO> Session for StreamOwned<IO> {
     type IO = IO;
     type Session = ConnectionWrapper;
 
+    /// Gets mutable references to the state, I/O object, and session.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing mutable references to the state, I/O object, and session.
     fn get_mut(&mut self) -> (&mut TlsState, &mut Self::IO, &mut Self::Session) {
         (&mut self.state, &mut self.io, &mut self.session)
     }
+
+    /// Converts the session into the I/O object.
+    ///
+    /// # Returns
+    ///
+    /// The I/O object.
     fn into_io(self) -> Self::IO {
         self.io
     }
 }
+
+/// A structure representing an accept operation.
+///
+/// This structure contains a mid-handshake state.
 pub struct Accept<IO>(MidHandshake<StreamOwned<IO>>);
 
+/// An enumeration representing the mid-handshake state.
+///
+/// This enumeration contains variants for handshaking, end, sending an alert, and an error.
 enum MidHandshake<S: Session> {
+    /// The handshaking state.
     Handshaking(S),
+    /// The end state.
     End,
+    /// The state for sending an alert.
     SendAlert {
+        /// The I/O object.
         io: S::IO,
+        /// The error.
         err: io::Error,
+        /// The accepted alert.
         alert: AcceptedAlert,
     },
+    /// The error state.
     Error {
+        /// The I/O object.
         io: S::IO,
+        /// The error.
         error: io::Error,
     },
 }
@@ -530,6 +836,15 @@ where
 {
     type Output = Result<S, (io::Error, S::IO)>;
 
+    /// Polls the mid-handshake state to progress the future.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the future.
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
 
@@ -582,6 +897,15 @@ where
 impl<IO: AsyncRead + AsyncWrite + Unpin> Future for Accept<IO> {
     type Output = io::Result<StreamOwned<IO>>;
 
+    /// Polls the accept operation to progress the future.
+    ///
+    /// # Arguments
+    ///
+    /// * `cx` - A mutable reference to the task context.
+    ///
+    /// # Returns
+    ///
+    /// A `Poll` indicating the result of the future.
     #[inline]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut self.0).poll(cx).map_err(|(err, _)| err)

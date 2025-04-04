@@ -8,6 +8,7 @@ use crate::crypto::provider::SupportedCipherSuite;
 use crate::crypto::sign::SigningKey;
 use crate::error::inappropriate_message;
 use crate::hs_hash::HandshakeHash;
+use crate::message::alert::AlertDescription;
 use crate::message::base::Payload;
 use crate::message::ccs::ChangeCipherSpecPayload;
 use crate::message::enums::{
@@ -19,7 +20,7 @@ use crate::message::hs::{
     ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangePayload, ServerName,
     ServerNamePayload, SessionID, SignatureAndHashAlgorithm,
 };
-use crate::verify::DigitalySinged;
+use crate::verify::DigitallySinged;
 use crate::{
     config::ServerConfig,
     connection::TlsState,
@@ -33,10 +34,22 @@ use log::debug;
 use rustls_pki_types::{CertificateDer, DnsName};
 use std::sync::Arc;
 
+/// Represents the context for handling TLS state.
 pub struct Context<'a> {
+    /// The current TLS state.
     pub(crate) state: &'a mut TlsState,
 }
-pub trait State {
+
+/// Trait for handling TLS states.
+pub trait State: Send + Sync {
+    /// Handles a TLS message.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `message` - The TLS message to handle.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         self: Box<Self>,
         cx: &mut Context,
@@ -44,15 +57,34 @@ pub trait State {
     ) -> Result<Box<dyn State>, Error>;
 }
 
+/// Represents the state expecting a ClientHello message.
 pub struct ExpectClientHello {
+    /// The server configuration.
     config: Arc<ServerConfig>,
 }
 
 impl ExpectClientHello {
+    /// Creates a new `ExpectClientHello` state.
+    ///
+    /// # Arguments
+    /// * `config` - The server configuration.
+    ///
+    /// # Returns
+    /// A new `ExpectClientHello` instance.
     pub fn new(config: Arc<ServerConfig>) -> Self {
         Self { config }
     }
 
+    /// Handles the ClientHello message with a certified key.
+    ///
+    /// # Arguments
+    /// * `sig` - The list of signature schemes.
+    /// * `client_hello` - The ClientHello payload.
+    /// * `message` - The TLS message.
+    /// * `cx` - The context containing the TLS state.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     pub(crate) fn with_certified_key(
         self,
         mut sig: Vec<SignatureScheme>,
@@ -74,12 +106,20 @@ impl ExpectClientHello {
         // only gonna send X.509 Certificate client may terminate
         let certkey = {
             let client_hello = ClientHello {
-                server_name: &None, // TODO: CHANGE THIS
+                server_name: &cx.state.sni,
                 sigschemes: &sig,
                 cipher_suites: &client_hello.cipher_suites,
             };
 
-            self.config.cert_resolver.resolve(client_hello).unwrap()
+            self.config
+                .cert_resolver
+                .resolve(client_hello)
+                .ok_or_else(|| {
+                    cx.state.send_fatal(
+                        AlertDescription::HandshakeFailure,
+                        Error::General("Failed to resolve certificate"),
+                    )
+                })?
         };
 
         #[allow(clippy::unnecessary_unwrap, clippy::unwrap_used)]
@@ -110,6 +150,15 @@ impl ExpectClientHello {
         .handle(cx, &certkey, client_hello, kxg, sig)
     }
 
+    /// Chooses the cipher suite and key exchange group.
+    ///
+    /// # Arguments
+    /// * `key` - The signature algorithm.
+    /// * `client_groups` - The list of named curves supported by the client.
+    /// * `client_suites` - The list of cipher suites supported by the client.
+    ///
+    /// # Returns
+    /// A result containing the selected cipher suite and key exchange group, or an error.
     fn choose_suite_and_kx_group(
         &self,
         key: SignatureAlgorithm,
@@ -156,18 +205,33 @@ impl ExpectClientHello {
     }
 }
 //#region
+/// Represents a ClientHello message in the TLS handshake.
 pub struct ClientHello<'a> {
+    /// The server name indication (SNI) provided by the client.
     pub(crate) server_name: &'a Option<DnsName<'a>>,
+    /// The list of signature schemes supported by the client.
     pub(crate) sigschemes: &'a [SignatureScheme],
+    /// The list of cipher suites supported by the client.
     pub(crate) cipher_suites: &'a [CipherSuite],
 }
 
 impl ClientHello<'_> {
+    /// Returns the server name indication (SNI) provided by the client.
+    ///
+    /// # Returns
+    /// An optional reference to the DNS name.
     pub fn sni(&self) -> &Option<DnsName> {
         self.server_name
     }
 }
 
+/// Processes the server name indication (SNI) extension.
+///
+/// # Arguments
+/// * `sni` - A slice of server names.
+///
+/// # Returns
+/// An optional reference to the DNS name.
 fn process_sni(sni: &[ServerName]) -> Option<DnsName<'_>> {
     fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
         if let ServerNamePayload::HostName(dns) = &name.payload {
@@ -180,6 +244,14 @@ fn process_sni(sni: &[ServerName]) -> Option<DnsName<'_>> {
     sni.iter().filter_map(only_dns_hostnames).next()
 }
 
+/// Processes a ClientHello message.
+///
+/// # Arguments
+/// * `message` - The TLS message containing the ClientHello payload.
+/// * `cx` - The context containing the TLS state.
+///
+/// # Returns
+/// A result containing a reference to the ClientHello payload and a vector of signature schemes, or an error.
 pub(crate) fn process_client_hello<'m>(
     message: &'m Message<'_>,
     cx: &mut Context,
@@ -199,6 +271,14 @@ pub(crate) fn process_client_hello<'m>(
 }
 
 impl State for ExpectClientHello {
+    /// Handles a TLS message in the ExpectClientHello state.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `message` - The TLS message to handle.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         self: Box<Self>,
         cx: &mut Context,
@@ -209,28 +289,49 @@ impl State for ExpectClientHello {
     }
 }
 
+/// Represents the random values used in the TLS connection.
 struct ConnectionRandoms {
+    /// The client's random value.
     client_random: Random,
+    /// The server's random value.
     server_random: Random,
 }
+
+/// Handles the finishing of the ClientHello message processing.
 struct FinishCHHandling {
+    /// The server configuration.
     config: Arc<ServerConfig>,
+    /// The handshake hash.
     transcript: HandshakeHash,
+    /// The selected cipher suite.
     suite: &'static crypto::CipherSuite,
+    /// The random values used in the connection.
     randoms: ConnectionRandoms,
 }
 
+/// Represents a flight of handshake messages.
 struct HandshakeFlight<'a> {
+    /// The buffer containing the handshake messages.
     buffer: Vec<u8>,
+    /// The handshake hash.
     hash: &'a mut HandshakeHash,
 }
+
 impl HandshakeFlight<'_> {
+    /// Adds a handshake message to the flight.
+    ///
+    /// # Arguments
+    /// * `message` - The handshake message to add.
     fn add(&mut self, message: &HandshakePayload) {
         let start = self.buffer.len();
         message.encode(&mut self.buffer);
         self.hash.add(&self.buffer[start..]);
     }
 
+    /// Finishes the handshake flight and sends the messages.
+    ///
+    /// # Arguments
+    /// * `tls_state` - The TLS state to send the messages.
     fn finish(self, tls_state: &mut TlsState) {
         tls_state.send_message(
             Message {
@@ -242,23 +343,33 @@ impl HandshakeFlight<'_> {
     }
 }
 
+/// Processes the extensions in the ClientHello message.
 #[derive(Default)]
-
 struct ExtensionProcessing {
+    /// The list of server extensions.
     exts: Vec<ServerExtension>,
 }
 
 impl ExtensionProcessing {
+    /// Creates a new `ExtensionProcessing` instance.
+    ///
+    /// # Returns
+    /// A new `ExtensionProcessing` instance.
     fn new() -> Self {
         Self::default()
     }
 
+    /// Processes the extensions in the ClientHello message.
+    ///
+    /// # Arguments
+    /// * `ch` - The ClientHello payload.
+    /// * `using_ems` - A flag indicating whether the extended master secret is used.
     fn process(&mut self, ch: &ClientHelloPayload, using_ems: bool) {
         if ch.sni_extension().is_some() {
             self.exts.push(ServerExtension::ServerNameAck);
         }
 
-        // dont offer reneg, stops things from complaining abt insecure reneg
+        // don't offer renegotiation, stops things from complaining about insecure renegotiation
         let secure_reneg_offered = ch.find_extension(ExtensionType::RenegotationInfo).is_some()
             || ch
                 .cipher_suites
@@ -274,6 +385,15 @@ impl ExtensionProcessing {
     }
 }
 
+/// Emits a ServerHello message.
+///
+/// # Arguments
+/// * `flight` - The handshake flight.
+/// * `client_hello` - The ClientHello payload.
+/// * `server_random` - The server's random value.
+/// * `suite` - The selected cipher suite.
+/// * `session_id` - The session ID.
+/// * `using_ems` - A flag indicating whether the extended master secret is used.
 fn emit_server_hello(
     flight: &mut HandshakeFlight,
     client_hello: &ClientHelloPayload,
@@ -297,12 +417,28 @@ fn emit_server_hello(
     flight.add(&sh);
 }
 
+/// Emits a Certificate message.
+///
+/// # Arguments
+/// * `flight` - The handshake flight.
+/// * `cert` - The certificate chain.
 fn emit_certificate(flight: &mut HandshakeFlight, cert: &[CertificateDer<'_>]) {
     flight.add(&HandshakePayload::Certificate(CertificateChain(
         cert.to_vec(),
     )));
 }
 
+/// Emits a ServerKeyExchange message.
+///
+/// # Arguments
+/// * `flight` - The handshake flight.
+/// * `sigschemes` - The list of signature schemes.
+/// * `selected_kxg` - The selected key exchange group.
+/// * `signing_key` - The signing key.
+/// * `randoms` - The random values used in the connection.
+///
+/// # Returns
+/// A result containing the active key exchange or an error.
 fn emit_server_kx(
     flight: &mut HandshakeFlight,
     sigschemes: Vec<SignatureScheme>,
@@ -326,16 +462,32 @@ fn emit_server_kx(
 
     let skx = ServerKeyExchangePayload::from(ServerKeyExchange {
         params: kx_params,
-        dss: DigitalySinged::new(sigscheme, sig),
+        dss: DigitallySinged::new(sigscheme, sig),
     });
 
     flight.add(&HandshakePayload::ServerKeyExchange(skx));
     Ok(kx)
 }
+
+/// Emits a ServerHelloDone message.
+///
+/// # Arguments
+/// * `flight` - The handshake flight.
 fn emit_server_hello_done(flight: &mut HandshakeFlight) {
     flight.add(&HandshakePayload::ServerHelloDone);
 }
 impl FinishCHHandling {
+    /// Handles the finishing of the ClientHello message processing.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `server_key` - The certified key.
+    /// * `client_hello` - The ClientHello payload.
+    /// * `selected_kxg` - The selected key exchange group.
+    /// * `sigschemes_ext` - The list of signature schemes.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         mut self,
         cx: &mut Context<'_>,
@@ -392,23 +544,44 @@ impl FinishCHHandling {
         }))
     }
 }
-//#endregion
+
+/// Represents the state expecting a ClientKeyExchange message.
 pub struct ExpectClientKx {
+    /// The server configuration.
     config: Arc<ServerConfig>,
+    /// The selected cipher suite.
     suite: &'static crypto::CipherSuite,
+    /// The handshake hash.
     transcript: HandshakeHash,
+    /// The random values used in the connection.
     randoms: ConnectionRandoms,
+    /// The server key.
     server_key: Box<dyn ActiveKx>,
+    /// A flag indicating whether the extended master secret is used.
     using_ems: bool,
 }
 
+/// Represents the secrets used in the TLS connection.
 pub(crate) struct ConnectionSecrets {
+    /// The random values used in the connection.
     randoms: ConnectionRandoms,
+    /// The selected cipher suite.
     suite: &'static crypto::CipherSuite,
+    /// The master secret.
     master_secret: [u8; 48],
 }
 
 impl ConnectionSecrets {
+    /// Creates a new `ConnectionSecrets` from the key exchange.
+    ///
+    /// # Arguments
+    /// * `kx` - The active key exchange.
+    /// * `peer_pub` - The peer's public key.
+    /// * `randoms` - The random values used in the connection.
+    /// * `suite` - The selected cipher suite.
+    ///
+    /// # Returns
+    /// A result containing the new `ConnectionSecrets` or an error.
     fn from_key_exchange(
         kx: Box<dyn ActiveKx>,
         peer_pub: &[u8],
@@ -439,6 +612,10 @@ impl ConnectionSecrets {
         Ok(ret)
     }
 
+    /// Creates a pair of cipher objects for encryption and decryption.
+    ///
+    /// # Returns
+    /// A tuple containing the message decrypter and encrypter.
     pub(crate) fn make_cipher_pair(
         &self,
     ) -> (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>) {
@@ -460,6 +637,10 @@ impl ConnectionSecrets {
         )
     }
 
+    /// Creates the key block for the connection.
+    ///
+    /// # Returns
+    /// A vector containing the key block.
     fn make_key_block(&self) -> Vec<u8> {
         let shape = self.suite.aead_algo.key_shape();
         let len = (shape.0 + shape.1) * 2 + shape.2;
@@ -479,6 +660,14 @@ impl ConnectionSecrets {
         out
     }
 
+    /// Creates the verify data for the connection.
+    ///
+    /// # Arguments
+    /// * `hash` - The hash output.
+    /// * `label` - The label for the verify data.
+    ///
+    /// # Returns
+    /// An array containing the verify data.
     fn make_verify_data(&self, hash: &hash::Output, label: &[u8]) -> [u8; 12] {
         let mut out = [0u8; 12];
         self.suite
@@ -489,6 +678,14 @@ impl ConnectionSecrets {
 }
 
 impl State for ExpectClientKx {
+    /// Handles a TLS message in the ExpectClientKx state.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `message` - The TLS message to handle.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         mut self: Box<Self>,
         cx: &mut Context,
@@ -523,12 +720,25 @@ impl State for ExpectClientKx {
     }
 }
 
+/// Represents the state expecting a ChangeCipherSpec message.
 struct ExpectCcs {
+    /// The server configuration.
     config: Arc<ServerConfig>,
+    /// The connection secrets.
     secrets: ConnectionSecrets,
+    /// The handshake hash.
     transcript: HandshakeHash,
 }
+
 impl State for ExpectCcs {
+    /// Handles a TLS message in the ExpectCcs state.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `message` - The TLS message to handle.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         mut self: Box<Self>,
         cx: &mut Context,
@@ -554,6 +764,10 @@ impl State for ExpectCcs {
     }
 }
 
+/// Emits a ChangeCipherSpec message.
+///
+/// # Arguments
+/// * `state` - The TLS state to send the message.
 fn emit_ccs(state: &mut TlsState) {
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -563,6 +777,12 @@ fn emit_ccs(state: &mut TlsState) {
     state.send_message(m, false);
 }
 
+/// Emits a Finished message.
+///
+/// # Arguments
+/// * `state` - The TLS state to send the message.
+/// * `transcript` - The handshake hash.
+/// * `secrets` - The connection secrets.
 fn emit_finished(
     state: &mut TlsState,
     transcript: &mut HandshakeHash,
@@ -582,13 +802,25 @@ fn emit_finished(
     state.send_message(m, true);
 }
 
+/// Represents the state expecting a Finished message.
 struct ExpectFinished {
+    /// The server configuration.
     config: Arc<ServerConfig>,
+    /// The handshake hash.
     transcript: HandshakeHash,
+    /// The connection secrets.
     secrets: ConnectionSecrets,
 }
 
 impl State for ExpectFinished {
+    /// Handles a TLS message in the ExpectFinished state.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `message` - The TLS message to handle.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         mut self: Box<Self>,
         cx: &mut Context,
@@ -618,9 +850,18 @@ impl State for ExpectFinished {
     }
 }
 
+/// Represents the state expecting application data traffic.
 struct ExpectTraffic;
 
 impl State for ExpectTraffic {
+    /// Handles a TLS message in the ExpectTraffic state.
+    ///
+    /// # Arguments
+    /// * `cx` - The context containing the TLS state.
+    /// * `message` - The TLS message to handle.
+    ///
+    /// # Returns
+    /// A result containing the next state or an error.
     fn handle(
         self: Box<Self>,
         cx: &mut Context,

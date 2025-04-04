@@ -2,12 +2,20 @@ use crate::message::MAX_WIRE_SIZE;
 use core::ops::Range;
 use std::io;
 
+/// A buffer for deframing TLS messages.
 pub struct VecDeframerBuffer {
+    /// The internal buffer storing the data.
     pub(super) buffer: Vec<u8>,
+    /// The number of bytes used in the buffer.
     used: usize,
 }
 
 impl VecDeframerBuffer {
+    /// Creates a new `VecDeframerBuffer`.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `VecDeframerBuffer`.
     pub fn new() -> VecDeframerBuffer {
         VecDeframerBuffer {
             buffer: Vec::new(),
@@ -15,22 +23,26 @@ impl VecDeframerBuffer {
         }
     }
 
+    /// Discards the specified number of bytes from the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `taken` - The number of bytes to discard.
     pub(crate) fn discard(&mut self, taken: usize) {
         #[allow(clippy::comparison_chain)]
+        /* Before:
+         * +----------+----------+----------+
+         * | taken    | pending  |xxxxxxxxxx|
+         * +----------+----------+----------+
+         * 0          ^ taken    ^ self.used
+         *
+         * After:
+         * +----------+----------+----------+
+         * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+         * +----------+----------+----------+
+         * 0          ^ self.used
+         */
         if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
             self.buffer.copy_within(taken..self.used, 0);
             self.used -= taken;
         } else if taken >= self.used {
@@ -38,14 +50,38 @@ impl VecDeframerBuffer {
         }
     }
 
+    /// Returns a mutable slice of the filled portion of the buffer.
+    ///
+    /// # Returns
+    ///
+    /// A mutable slice of the filled portion of the buffer.
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buffer[..self.used]
     }
 
+    /// Returns a slice of the filled portion of the buffer.
+    ///
+    /// # Returns
+    ///
+    /// A slice of the filled portion of the buffer.
     pub(crate) fn filled(&self) -> &[u8] {
         &self.buffer[..self.used]
     }
 
+    /// Reads data from the given reader into the buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `rd` - A mutable reference to a reader.
+    /// * `in_handshake` - A boolean indicating if the read is during a handshake.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `io::Error` if reading fails.
     pub(crate) fn read(&mut self, rd: &mut dyn io::Read, in_handshake: bool) -> io::Result<usize> {
         if let Err(err) = self.prepare_read(in_handshake) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, err));
@@ -60,7 +96,15 @@ impl VecDeframerBuffer {
         Ok(new_bytes)
     }
 
-    /// Resize the internal `buf` if necessary for reading more bytes.
+    /// Resizes the internal buffer if necessary for reading more bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `is_joining_hs` - A boolean indicating if the read is during a handshake.
+    ///
+    /// # Returns
+    ///
+    /// An `Ok` result if resizing is successful, or an error message if the buffer is full.
     fn prepare_read(&mut self, is_joining_hs: bool) -> Result<(), &'static str> {
         /// TLS allows for handshake messages of up to 16MB.  We
         /// restrict that to 64KB to limit potential for denial-of-
@@ -101,9 +145,15 @@ impl VecDeframerBuffer {
         Ok(())
     }
 
-    /// Append `bytes` to the end of this buffer.
+    /// Appends bytes to the end of the buffer.
     ///
-    /// Return a `Range` saying where it went.
+    /// # Arguments
+    ///
+    /// * `bytes` - A slice of bytes to append.
+    ///
+    /// # Returns
+    ///
+    /// A `Range` indicating where the bytes were appended.
     pub(crate) fn extend(&mut self, bytes: &[u8]) -> Range<usize> {
         let len = bytes.len();
         let start = self.used;

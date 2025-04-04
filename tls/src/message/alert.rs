@@ -41,18 +41,35 @@ enum_builder! {
     }
 }
 
+/// Represents the payload of an alert message in TLS.
 #[derive(Debug, Clone)]
 pub struct AlertPayload {
+    /// The level of the alert.
     pub(crate) level: AlertLevel,
+    /// The description of the alert.
     pub(crate) description: AlertDescription,
 }
 
 impl Codec<'_> for AlertPayload {
+    /// Encodes the alert payload into a byte vector.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - A mutable reference to a byte vector where the encoded payload will be stored.
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.level.encode(bytes);
         self.description.encode(bytes);
     }
 
+    /// Reads an alert payload from a byte reader.
+    ///
+    /// # Arguments
+    ///
+    /// * `r` - A mutable reference to a byte reader.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the alert payload or an invalid message error.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let level = AlertLevel::read(r)?;
         let description = AlertDescription::read(r)?;
