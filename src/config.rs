@@ -5,33 +5,31 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::{net::SocketAddr, path::PathBuf};
 
+/// Configuration for the server, represented as a map of server names to server configurations.
 #[derive(Debug)]
 pub struct Config(HashMap<String, Server>);
 
 impl Deref for Config {
     type Target = HashMap<String, Server>;
 
+    /// Dereferences the `Config` to access the underlying `HashMap`.
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl DerefMut for Config {
+    /// Dereferences the `Config` to access the underlying `HashMap` mutably.
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 impl Config {
-    // pub fn get_server_from_sni(&mut self, sni: Option<&DnsName>) -> Option<&mut Server> {
-    //     let Some(sni) = sni else {
-    //         return None;
-    //     };
-    //     self.0
-    //         .iter_mut()
-    //         .find(|server| &server.server_name == sni.as_ref())
-    // }
-
+    /// Returns an iterator over servers that have TLS enabled.
+    ///
+    /// # Returns
+    /// An iterator over tuples of server names and their corresponding `SSLConfig`.
     pub fn tls_enabled_servers(&self) -> impl Iterator<Item = (&String, &SSLConfig)> {
         self.0
             .iter()
@@ -39,30 +37,43 @@ impl Config {
     }
 }
 
+/// Configuration for an individual server.
 #[derive(Debug)]
 pub struct Server {
+    /// Optional SSL configuration for the server.
     pub ssl: Option<SSLConfig>,
+    /// Load balancer used by the server.
     pub load_balancer: Box<dyn load_balancers::LoadBalancer>,
 }
 
 impl Server {
+    /// Checks if the server should decrypt incoming connections.
+    ///
+    /// # Returns
+    /// `true` if the server has SSL configuration, `false` otherwise.
     pub fn should_decrypt(&self) -> bool {
         self.ssl.is_some()
     }
 }
 
+/// SSL configuration for a server.
 #[derive(Debug, Deserialize)]
 pub struct SSLConfig {
+    /// Path to the SSL certificate file.
     pub ssl_certificate: PathBuf,
+    /// Path to the SSL certificate key file.
     pub ssl_certificate_key: PathBuf,
 }
 
+/// Represents an upstream server with its socket address.
 #[derive(Debug, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct Upstream {
+    /// Socket address of the upstream server.
     pub addr: SocketAddr,
 }
 
+/// Enumeration of available load balancers.
 #[derive(Debug, Deserialize)]
 enum LoadBalancer {
     RoundRobin,
@@ -70,12 +81,21 @@ enum LoadBalancer {
 }
 
 impl Default for LoadBalancer {
+    /// Provides the default load balancer, which is `RoundRobin`.
     fn default() -> Self {
         Self::RoundRobin
     }
 }
-//region Deserialize Impls
+
+// region Deserialize Impls
 impl<'de> Deserialize<'de> for Config {
+    /// Deserializes a `Config` from a deserializer.
+    ///
+    /// # Arguments
+    /// * `deserializer` - The deserializer to read the `Config` from.
+    ///
+    /// # Returns
+    /// A `Result` containing the deserialized `Config` or an error.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -91,6 +111,13 @@ impl<'de> Deserialize<'de> for Config {
 }
 
 impl<'de> Deserialize<'de> for Upstream {
+    /// Deserializes an `Upstream` from a deserializer.
+    ///
+    /// # Arguments
+    /// * `deserializer` - The deserializer to read the `Upstream` from.
+    ///
+    /// # Returns
+    /// A `Result` containing the deserialized `Upstream` or an error.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -101,8 +128,17 @@ impl<'de> Deserialize<'de> for Upstream {
     }
 }
 
+/// Helper struct for deserializing named servers.
 struct NamedServer(String, Server);
+
 impl<'de> Deserialize<'de> for NamedServer {
+    /// Deserializes a `NamedServer` from a deserializer.
+    ///
+    /// # Arguments
+    /// * `deserializer` - The deserializer to read the `NamedServer` from.
+    ///
+    /// # Returns
+    /// A `Result` containing the deserialized `NamedServer` or an error.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -122,15 +158,22 @@ impl<'de> Deserialize<'de> for NamedServer {
         ))
     }
 }
+
 mod helper {
     use super::*;
+    
+    /// Helper struct for deserializing server configurations.
     #[derive(Debug, Deserialize)]
     pub struct Server {
+        /// Name of the server.
         pub server_name: String,
+        /// Optional SSL configuration for the server.
         pub ssl: Option<SSLConfig>,
+        /// List of upstream servers.
         pub upstreams: Vec<Upstream>,
+        /// Load balancer used by the server.
         #[serde(default = "LoadBalancer::default")]
         pub load_balancer: LoadBalancer,
     }
 }
-//endregion
+// endregion

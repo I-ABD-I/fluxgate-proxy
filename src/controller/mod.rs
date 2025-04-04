@@ -13,6 +13,15 @@ use tls::config::ServerConfig;
 use tls::futures::LazyAcceptor;
 use tls::server::Acceptor;
 
+/// Handles the client connection.
+///
+/// # Arguments
+/// * `socket` - The client socket.
+/// * `tls_config` - The TLS configuration.
+/// * `proxy_config` - The proxy configuration.
+///
+/// # Returns
+/// An `anyhow::Result` indicating the success or failure of the operation.
 pub async fn client_handler<T>(
     mut socket: T,
     tls_config: Arc<ServerConfig>,
@@ -80,6 +89,16 @@ where
 
     Ok(res?)
 }
+
+/// Main loop for handling the proxying of data between the client and the server.
+///
+/// # Arguments
+/// * `transport` - The transport stream.
+/// * `server_addr` - The server address.
+/// * `early_data` - The early data to send to the server.
+///
+/// # Returns
+/// An `io::Result` indicating the success or failure of the operation.
 async fn main_loop<T>(
     mut transport: T,
     server_addr: SocketAddr,
