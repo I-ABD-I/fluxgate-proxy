@@ -140,7 +140,7 @@ impl PayloadU8 {
 }
 
 impl TLSListElement for PayloadU8 {
-    const LENGHT_SIZE: crate::codec::ListLength = crate::codec::ListLength::u8;
+    const LENGTH_SIZE: crate::codec::ListLength = crate::codec::ListLength::u8;
 }
 
 impl Codec<'_> for PayloadU8 {
@@ -210,7 +210,7 @@ impl PayloadU16 {
 }
 
 impl TLSListElement for PayloadU16 {
-    const LENGHT_SIZE: crate::codec::ListLength = crate::codec::ListLength::u16;
+    const LENGTH_SIZE: crate::codec::ListLength = crate::codec::ListLength::u16;
 }
 
 impl Codec<'_> for PayloadU16 {

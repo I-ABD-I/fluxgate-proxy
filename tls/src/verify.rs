@@ -1,8 +1,5 @@
 use crate::message::enums::SignatureScheme;
-use crate::{
-    codec::Codec,
-    message::base::PayloadU16,
-};
+use crate::{codec::Codec, message::base::PayloadU16};
 
 /// Represents a digitally signed message.
 #[derive(Debug)]

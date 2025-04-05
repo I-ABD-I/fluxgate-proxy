@@ -497,14 +497,23 @@ impl ConnectionCore {
 }
 
 impl Deref for ConnectionCore {
+    /// The target type for dereferencing.
     type Target = TlsState;
 
+    /// Dereferences the `ConnectionCore` to access the `TlsState`.
+    ///
+    /// # Returns
+    /// A reference to the `TlsState`.
     fn deref(&self) -> &Self::Target {
         &self.tls_state
     }
 }
 
 impl DerefMut for ConnectionCore {
+    /// Dereferences the `ConnectionCore` to access the `TlsState` mutably.
+    ///
+    /// # Returns
+    /// A mutable reference to the `TlsState`.
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.tls_state
     }
@@ -538,14 +547,23 @@ impl From<ConnectionCore> for Connection {
 }
 
 impl Deref for Connection {
+    /// The target type for dereferencing.
     type Target = ConnectionCore;
 
+    /// Dereferences the `Connection` to access the `ConnectionCore`.
+    ///
+    /// # Returns
+    /// A reference to the `ConnectionCore`.
     fn deref(&self) -> &Self::Target {
         &self.core
     }
 }
 
 impl DerefMut for Connection {
+    /// Dereferences the `Connection` to access the `ConnectionCore` mutably.
+    ///
+    /// # Returns
+    /// A mutable reference to the `ConnectionCore`.
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.core
     }

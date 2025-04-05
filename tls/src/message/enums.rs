@@ -188,6 +188,7 @@ enum_builder! {
 }
 
 impl ECPointFormat {
+    /// Returns the supported point format for the given `ECPointFormat`.
     pub(crate) const SUPPORTED: [Self; 1] = [Self::Uncompressed];
 }
 

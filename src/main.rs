@@ -1,16 +1,10 @@
-mod cert_resolver;
-mod config;
-mod controller;
-mod error;
-mod load_balancers;
-mod logger;
-
-use crate::config::SSLConfig;
-use crate::controller::client_handler;
-use crate::logger::create_logger;
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use clap::Parser;
+use fluxgate::config::SSLConfig;
+use fluxgate::controller::client_handler;
+use fluxgate::logger::create_logger;
+use fluxgate::{cert_resolver, config};
 use log::{debug, error};
 use std::{fs, path::PathBuf};
 use tls::config::ServerConfig;

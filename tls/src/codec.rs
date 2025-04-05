@@ -120,10 +120,21 @@ pub trait Codec<'a>: Sized {
 }
 
 impl Codec<'_> for u8 {
+    /// Encodes the `u8` value into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
 
+    /// Reads and decodes a `u8` value from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded `u8` value or an error.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         r.take(1)
             .map(|b| b[0])
@@ -132,10 +143,21 @@ impl Codec<'_> for u8 {
 }
 
 impl Codec<'_> for u16 {
+    /// Encodes the `u16` value into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.to_be_bytes());
     }
 
+    /// Reads and decodes a `u16` value from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded `u16` value or an error.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         r.take(2)
             .map(|b| u16::from_be_bytes([b[0], b[1]]))
@@ -149,6 +171,13 @@ impl Codec<'_> for u16 {
 pub struct u24(pub u32);
 
 impl From<u24> for usize {
+    /// Converts a `u24` value to a `usize`.
+    ///
+    /// # Arguments
+    /// * `value` - The `u24` value to convert.
+    ///
+    /// # Returns
+    /// * `usize` - The converted value.
     #[inline]
     fn from(value: u24) -> Self {
         value.0 as Self
@@ -156,11 +185,22 @@ impl From<u24> for usize {
 }
 
 impl Codec<'_> for u24 {
+    /// Encodes the `u24` value into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>) {
         let be_bytes = self.0.to_be_bytes();
         bytes.extend_from_slice(&be_bytes[1..]);
     }
 
+    /// Reads and decodes a `u24` value from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded `u24` value or an error.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         match r.take(3) {
             Some(&[a, b, c]) => Ok(Self(u32::from_be_bytes([0, a, b, c]))),
@@ -170,10 +210,21 @@ impl Codec<'_> for u24 {
 }
 
 impl Codec<'_> for u32 {
+    /// Encodes the `u32` value into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.to_be_bytes());
     }
 
+    /// Reads and decodes a `u32` value from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded `u32` value or an error.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         r.take(4)
             .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
@@ -182,10 +233,21 @@ impl Codec<'_> for u32 {
 }
 
 impl Codec<'_> for u64 {
+    /// Encodes the `u64` value into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.to_be_bytes());
     }
 
+    /// Reads and decodes a `u64` value from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded `u64` value or an error.
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         r.take(8)
             .map(|b| u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
@@ -226,6 +288,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
 }
 
 impl Drop for LengthPrefixedBuffer<'_> {
+    /// Drops the `LengthPrefixedBuffer` and updates the length prefix in the buffer.
     fn drop(&mut self) {
         match self.size_len {
             ListLength::u8 => {
@@ -250,7 +313,6 @@ impl Drop for LengthPrefixedBuffer<'_> {
         }
     }
 }
-
 /// Represents the length of a list.
 #[allow(non_camel_case_types)]
 pub enum ListLength {
@@ -261,23 +323,35 @@ pub enum ListLength {
 
 /// Trait for elements in a TLS list.
 pub trait TLSListElement {
-    const LENGHT_SIZE: ListLength;
+    /// The size of the length prefix for the list element.
+    const LENGTH_SIZE: ListLength;
 }
 
 impl<'a, T> Codec<'a> for Vec<T>
 where
     T: Codec<'a> + TLSListElement + fmt::Debug,
 {
+    /// Encodes the vector of elements into a byte vector.
+    ///
+    /// # Arguments
+    /// * `bytes` - The byte vector to encode into.
     fn encode(&self, bytes: &mut Vec<u8>) {
         // length is the byte slice length and not the vec length
-        let nest = LengthPrefixedBuffer::new(T::LENGHT_SIZE, bytes);
+        let nest = LengthPrefixedBuffer::new(T::LENGTH_SIZE, bytes);
         for i in self {
             i.encode(nest.buf);
         }
     }
 
+    /// Reads and decodes a vector of elements from a `Reader`.
+    ///
+    /// # Arguments
+    /// * `r` - The `Reader` to read from.
+    ///
+    /// # Returns
+    /// * `Result<Self, InvalidMessage>` - The decoded vector or an error.
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let length = match T::LENGHT_SIZE {
+        let length = match T::LENGTH_SIZE {
             ListLength::u8 => u8::read(r)? as usize,
             ListLength::u16 => u16::read(r)? as usize,
             ListLength::u24 { max, error } => match usize::from(u24::read(r)?) {
@@ -323,7 +397,7 @@ mod tests {
     }
 
     impl TLSListElement for Foo {
-        const LENGHT_SIZE: ListLength = ListLength::u24 {
+        const LENGTH_SIZE: ListLength = ListLength::u24 {
             max: 100,
             error: InvalidMessage::InvalidCCS, // temp dosent matter
         };

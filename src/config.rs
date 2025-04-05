@@ -161,7 +161,7 @@ impl<'de> Deserialize<'de> for NamedServer {
 
 mod helper {
     use super::*;
-    
+
     /// Helper struct for deserializing server configurations.
     #[derive(Debug, Deserialize)]
     pub struct Server {
