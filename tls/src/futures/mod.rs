@@ -741,7 +741,7 @@ where
             state: TlsState::Stream,
         }))
     }
-    
+
     /// Takes the I/O object.
     ///
     /// # Returns

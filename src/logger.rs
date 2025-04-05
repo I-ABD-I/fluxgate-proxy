@@ -40,7 +40,7 @@ fn file_logger(builders: &mut [LoggerBuilder], config: &mut ConfigBuilder) -> an
 ///
 /// # Returns
 /// An `anyhow::Result` indicating the success or failure of the operation.
-pub(super) fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<()> {
+pub fn create_logger(verbose: bool, log_to_file: bool) -> anyhow::Result<()> {
     let console = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new(
             "{d(%Y-%m-%d %H:%M:%S)} {h({l})} [{h({t})}] {m}{n}",

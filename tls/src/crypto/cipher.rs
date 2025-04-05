@@ -218,6 +218,7 @@ pub struct AeadKey {
 }
 
 impl AeadKey {
+    /// The maximum size of the AEAD key.
     const MAX_SIZE: usize = 32;
 
     /// Creates a new AEAD key from the given key slice.
@@ -345,9 +346,11 @@ struct GcmDecrypter {
     salt: [u8; 4],
 }
 
+/// The length of the explicit nonce for GCM (Galois/Counter Mode).
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
-const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
+/// The overhead size for GCM, which includes the explicit nonce length and the tag length.
+const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 impl MessageDecrypter for GcmDecrypter {
     /// Decrypts the given message with the provided sequence number.
     ///
@@ -475,8 +478,14 @@ fn make_tls12_aad(
     out
 }
 
+/// The size of the TLS 1.2 Additional Authenticated Data (AAD).
+///
+/// This constant represents the size of the AAD, which is composed of:
+/// - 8 bytes for the sequence number
+/// - 1 byte for the content type
+/// - 2 bytes for the protocol version
+/// - 2 bytes for the length of the payload
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
-
 /// A trait representing a Pseudo-Random Function (PRF).
 ///
 /// This trait provides methods to generate keys for key exchange and secrets.

@@ -2,8 +2,8 @@ mod least_connections;
 mod round_robin;
 
 use crate::config::Upstream;
-pub use round_robin::RoundRobin;
 pub use least_connections::LeastConnections;
+pub use round_robin::RoundRobin;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 

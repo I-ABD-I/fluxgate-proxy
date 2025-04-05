@@ -170,7 +170,7 @@ impl Accepted {
     /// * `ClientHello<'_>` - The client hello message.
     pub fn client_hello(&self) -> ClientHello<'_> {
         let payload = Self::client_hello_payload(&self.message);
-         ClientHello {
+        ClientHello {
             server_name: &self.connection.sni,
             sigschemes: &self.signature_schemes,
             cipher_suites: &payload.cipher_suites,

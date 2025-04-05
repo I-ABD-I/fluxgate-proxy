@@ -181,7 +181,7 @@ impl<'a> Codec<'a> for HandshakePayload<'a> {
         sub.expect_empty("HandshakePayload").map(|_| hs)
     }
 }
-
+/// Represents a random value used in the TLS protocol.
 #[derive(Debug, Clone, Copy)]
 pub struct Random([u8; 32]);
 
@@ -235,7 +235,7 @@ impl AsRef<[u8]> for Random {
         &self.0
     }
 }
-
+/// Represents a session ID in the TLS protocol.
 #[derive(Debug, Copy, Clone)]
 pub struct SessionID {
     length: usize,
@@ -444,19 +444,19 @@ impl Codec<'_> for ServerName {
 }
 
 impl TLSListElement for SignatureScheme {
-    const LENGHT_SIZE: ListLength = ListLength::u16;
+    const LENGTH_SIZE: ListLength = ListLength::u16;
 }
 
 impl TLSListElement for NamedCurve {
-    const LENGHT_SIZE: ListLength = ListLength::u16;
+    const LENGTH_SIZE: ListLength = ListLength::u16;
 }
 
 impl TLSListElement for ECPointFormat {
-    const LENGHT_SIZE: ListLength = ListLength::u8;
+    const LENGTH_SIZE: ListLength = ListLength::u8;
 }
 
 impl TLSListElement for ServerName {
-    const LENGHT_SIZE: ListLength = ListLength::u16;
+    const LENGTH_SIZE: ListLength = ListLength::u16;
 }
 
 /// Represents a client extension in the TLS protocol.
@@ -596,25 +596,25 @@ impl Codec<'_> for ServerExtension {
 /// Implements the `TLSListElement` trait for `CipherSuite`.
 impl TLSListElement for CipherSuite {
     /// The length size of the `CipherSuite` list element.
-    const LENGHT_SIZE: ListLength = ListLength::u16;
+    const LENGTH_SIZE: ListLength = ListLength::u16;
 }
 
 /// Implements the `TLSListElement` trait for `CompressionMethod`.
 impl TLSListElement for CompressionMethod {
     /// The length size of the `CompressionMethod` list element.
-    const LENGHT_SIZE: ListLength = ListLength::u8;
+    const LENGTH_SIZE: ListLength = ListLength::u8;
 }
 
 /// Implements the `TLSListElement` trait for `ClientExtension`.
 impl TLSListElement for ClientExtension {
     /// The length size of the `ClientExtension` list element.
-    const LENGHT_SIZE: ListLength = ListLength::u16;
+    const LENGTH_SIZE: ListLength = ListLength::u16;
 }
 
 /// Implements the `TLSListElement` trait for `ServerExtension`.
 impl TLSListElement for ServerExtension {
     /// The length size of the `ServerExtension` list element.
-    const LENGHT_SIZE: ListLength = ListLength::u16;
+    const LENGTH_SIZE: ListLength = ListLength::u16;
 }
 
 /// Represents the payload of a ClientHello message in the TLS protocol.
@@ -806,7 +806,7 @@ impl CertificateChain<'_> {
 
 impl TLSListElement for CertificateDer<'_> {
     /// The length size of the `CertificateDer` list element.
-    const LENGHT_SIZE: ListLength = ListLength::u24 {
+    const LENGTH_SIZE: ListLength = ListLength::u24 {
         max: MAX_CERTIFICATE_SIZE_LIMIT,
         error: InvalidMessage::CertificatePayloadTooLarge,
     };

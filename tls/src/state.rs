@@ -233,6 +233,13 @@ impl ClientHello<'_> {
 /// # Returns
 /// An optional reference to the DNS name.
 fn process_sni(sni: &[ServerName]) -> Option<DnsName<'_>> {
+    /// Extracts the DNS hostname from a `ServerName` if it is of type `HostName`.
+    ///
+    /// # Arguments
+    /// * `name` - The `ServerName` to extract the DNS hostname from.
+    ///
+    /// # Returns
+    /// An `Option` containing a reference to the `DnsName` if the `ServerName` is of type `HostName`, otherwise `None`.
     fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
         if let ServerNamePayload::HostName(dns) = &name.payload {
             Some(dns.borrow())
