@@ -328,6 +328,10 @@ impl TlsState {
             (false, false) => Err(io::ErrorKind::WouldBlock.into()),
         }
     }
+
+    pub fn send_close_notify(&mut self) {
+        self.send_warning(AlertDescription::CloseNotify);
+    }
 }
 // ONLY IMPLEMENTING SERVERSIDE TLS
 /// Represents the core of a TLS connection.

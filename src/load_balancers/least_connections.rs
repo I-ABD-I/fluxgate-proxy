@@ -2,12 +2,11 @@ use crate::config::Upstream;
 use crate::load_balancers::LoadBalancer;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// A load balancer that selects the upstream with the least number of connections.
 #[derive(Debug)]
 pub struct LeastConnections {
-    /// A map of upstreams to their current number of connections.
-    upstreams: HashMap<Upstream, usize>,
+    upstreams: HashMap<Upstream, AtomicUsize>,
 }
 
 impl From<Vec<Upstream>> for LeastConnections {
@@ -20,33 +19,28 @@ impl From<Vec<Upstream>> for LeastConnections {
     /// A new `LeastConnections` instance.
     fn from(upstreams: Vec<Upstream>) -> Self {
         Self {
-            upstreams: upstreams.into_iter().map(|u| (u, 0)).collect(),
+            upstreams: upstreams
+                .into_iter()
+                .map(|u| (u, AtomicUsize::new(0)))
+                .collect(),
         }
     }
 }
 
 impl LoadBalancer for LeastConnections {
-    /// Gets the upstream with the least number of connections and increments its connection count.
-    ///
-    /// # Returns
-    /// An optional reference to the selected upstream.
-    fn get_upstream(&mut self) -> Option<&Upstream> {
-        let (upstream, connections) = self
+    fn get_upstream(&self) -> Option<Upstream> {
+        let (upstream, conn) = self
             .upstreams
-            .iter_mut()
-            .min_by_key(|(_, connections)| **connections)?;
+            .iter()
+            .min_by_key(|(_, connections)| connections.load(Ordering::Relaxed))?;
 
-        *connections += 1;
-        Some(upstream)
+        conn.fetch_add(1, Ordering::Relaxed);
+        Some(*upstream)
     }
 
-    /// Releases a connection from the specified upstream.
-    ///
-    /// # Arguments
-    /// * `addr` - The address of the upstream to release the connection from.
-    fn release(&mut self, addr: SocketAddr) {
-        if let Some(connections) = self.upstreams.get_mut(&Upstream { addr }) {
-            *connections -= 1;
+    fn release(&self, addr: SocketAddr) {
+        if let Some(connections) = self.upstreams.get(&Upstream { addr }) {
+            connections.fetch_sub(1, Ordering::Relaxed);
         }
     }
 }

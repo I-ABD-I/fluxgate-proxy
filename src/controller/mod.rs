@@ -1,11 +1,9 @@
-mod handshake_logger;
 
 use crate::config::Config;
-use crate::controller::handshake_logger::HandshakeLogger;
 use crate::error::{ServerNotFound, UnableToFindUpstream};
 use async_std::io;
 use async_std::net::TcpStream;
-use async_std::sync::{Arc, Mutex};
+use async_std::sync::Arc;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt};
 use log::{debug, info};
 use std::net::SocketAddr;
@@ -22,16 +20,21 @@ use tls::server::Acceptor;
 ///
 /// # Returns
 /// An `anyhow::Result` indicating the success or failure of the operation.
-pub async fn client_handler<T>(
-    mut socket: T,
+pub async fn client_handler(
+    socket: TcpStream,
     tls_config: Arc<ServerConfig>,
-    proxy_config: Arc<Mutex<Config>>,
+    proxy_config: Arc<Config>,
 ) -> anyhow::Result<()>
 where
-    T: AsyncRead + AsyncWrite + Unpin,
 {
-    let logger = HandshakeLogger::from(&mut socket);
-    let acceptor = LazyAcceptor::new(Acceptor::default(), logger);
+    let client_hello = {
+        let mut log = vec![0u8; 4096];
+        let size = socket.peek(log.as_mut_slice()).await?;
+        log.truncate(size);
+        log
+    };
+
+    let acceptor = LazyAcceptor::new(Acceptor::default(), socket);
     let sh = acceptor.await?;
     let sni = sh
         .client_hello()
@@ -40,8 +43,7 @@ where
         .ok_or(ServerNotFound)?
         .to_lowercase_owned();
 
-    let mut inner = proxy_config.lock().await;
-    let server = inner.get_mut(sni.as_ref()).ok_or(ServerNotFound)?;
+    let server = proxy_config.get(sni.as_ref()).ok_or(ServerNotFound)?;
 
     let addr = server
         .load_balancer
@@ -63,31 +65,26 @@ where
         if should_decrypt { "is" } else { "is not" }
     );
 
-    drop(inner); // drop lock before main loop
-
-    let res = if should_decrypt {
+    if should_decrypt {
         let stream = sh.into_stream(tls_config.clone()).await?;
         main_loop(
             stream,
             addr,
             Vec::new(), // doesn't allocate so fine to leave like this.
         )
-        .await
+        .await?;
     } else {
-        let logger = sh.take_io();
-        let log = logger.take_log(); // unborrow socket (log contains only ClientHello message)
-        main_loop(socket, addr, log).await
+        let socket = sh.take_io();
+        main_loop(socket, addr, client_hello).await?;
     };
 
     proxy_config
-        .lock()
-        .await
-        .get_mut(sni.as_ref())
+        .get(sni.as_ref())
         .unwrap() // unwrap is safe because we looked this up earlier
         .load_balancer
         .release(addr);
 
-    Ok(res?)
+    Ok(())
 }
 
 /// Main loop for handling the proxying of data between the client and the server.
@@ -129,6 +126,7 @@ where
                 let len = res?;
                 if len == 0 {
                     debug!("Connection Closed");
+                    transport.close().await?;
                     break;
                 };
                 transport.write_all(&buf_server[..len]).await?;

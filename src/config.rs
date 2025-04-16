@@ -1,10 +1,14 @@
+use crate::cert_resolver::CertificateResolver;
 use crate::load_balancers;
-use crate::load_balancers::{LeastConnections, RoundRobin};
+use crate::load_balancers::{LeastConnections, ResourceBased, RoundRobin};
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::{net::SocketAddr, path::PathBuf};
-
+use tls::config::ServerConfig;
+use tls::pki_types::pem::PemObject;
+use tls::pki_types::{CertificateDer, PrivateKeyDer};
 /// Configuration for the server, represented as a map of server names to server configurations.
 #[derive(Debug)]
 pub struct Config(HashMap<String, Server>);
@@ -26,14 +30,57 @@ impl DerefMut for Config {
 }
 
 impl Config {
+    pub async fn read_from_file(path: &PathBuf) -> anyhow::Result<Self> {
+        let servers: Vec<helper::Server> =
+            ron::from_str(&async_std::fs::read_to_string(path).await?)?;
+
+        let mut map = HashMap::new();
+
+        for server in servers {
+            let load_balancer: Box<dyn load_balancers::LoadBalancer> = match server.load_balancer {
+                LoadBalancer::RoundRobin => Box::new(RoundRobin::from(server.upstreams)),
+                LoadBalancer::LeastConnections => {
+                    Box::new(LeastConnections::from(server.upstreams))
+                }
+                LoadBalancer::ResourceBased => Box::new(ResourceBased::from(server.upstreams)),
+            };
+
+            map.insert(
+                server.server_name,
+                Server {
+                    ssl: server.ssl,
+                    load_balancer,
+                },
+            );
+        }
+
+        Ok(Self(map))
+    }
+
     /// Returns an iterator over servers that have TLS enabled.
     ///
     /// # Returns
     /// An iterator over tuples of server names and their corresponding `SSLConfig`.
-    pub fn tls_enabled_servers(&self) -> impl Iterator<Item = (&String, &SSLConfig)> {
-        self.0
-            .iter()
-            .filter_map(|(server_name, server)| Some((server_name, server.ssl.as_ref()?)))
+    pub fn build_tls_config(&self) -> anyhow::Result<ServerConfig> {
+        let mut resolver = CertificateResolver::new();
+        let tls_cfg = ServerConfig::builder();
+        for (name, server) in self.iter() {
+            if let Some(certificate_pair) = &server.ssl {
+                let certs = CertificateDer::pem_file_iter(&certificate_pair.ssl_certificate)?
+                    .map(|cert| cert.unwrap())
+                    .collect();
+                let key = PrivateKeyDer::from_pem_file(&certificate_pair.ssl_certificate_key)?;
+
+                let cert = Arc::new(tls::config::CertifiedKey::from_der(
+                    certs,
+                    key,
+                    tls_cfg.provider(),
+                )?);
+                resolver.add_certificate(name.to_lowercase(), cert);
+            }
+        }
+
+        Ok(tls_cfg.with_cert_resolver(Arc::new(resolver)))
     }
 }
 
@@ -66,7 +113,7 @@ pub struct SSLConfig {
 }
 
 /// Represents an upstream server with its socket address.
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 #[repr(transparent)]
 pub struct Upstream {
     /// Socket address of the upstream server.
@@ -74,10 +121,11 @@ pub struct Upstream {
 }
 
 /// Enumeration of available load balancers.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 enum LoadBalancer {
     RoundRobin,
     LeastConnections,
+    ResourceBased,
 }
 
 impl Default for LoadBalancer {
@@ -88,27 +136,6 @@ impl Default for LoadBalancer {
 }
 
 // region Deserialize Impls
-impl<'de> Deserialize<'de> for Config {
-    /// Deserializes a `Config` from a deserializer.
-    ///
-    /// # Arguments
-    /// * `deserializer` - The deserializer to read the `Config` from.
-    ///
-    /// # Returns
-    /// A `Result` containing the deserialized `Config` or an error.
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let servers: Vec<NamedServer> = Deserialize::deserialize(deserializer)?;
-        let map = servers
-            .into_iter()
-            .map(|s| (s.0, s.1))
-            .collect::<HashMap<_, _>>();
-
-        Ok(Self(map))
-    }
-}
 
 impl<'de> Deserialize<'de> for Upstream {
     /// Deserializes an `Upstream` from a deserializer.
@@ -125,37 +152,6 @@ impl<'de> Deserialize<'de> for Upstream {
         Ok(Upstream {
             addr: SocketAddr::deserialize(deserializer)?,
         })
-    }
-}
-
-/// Helper struct for deserializing named servers.
-struct NamedServer(String, Server);
-
-impl<'de> Deserialize<'de> for NamedServer {
-    /// Deserializes a `NamedServer` from a deserializer.
-    ///
-    /// # Arguments
-    /// * `deserializer` - The deserializer to read the `NamedServer` from.
-    ///
-    /// # Returns
-    /// A `Result` containing the deserialized `NamedServer` or an error.
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let server = helper::Server::deserialize(deserializer)?;
-        let load_balancer: Box<dyn load_balancers::LoadBalancer> = match server.load_balancer {
-            LoadBalancer::RoundRobin => Box::new(RoundRobin::from(server.upstreams)),
-            LoadBalancer::LeastConnections => Box::new(LeastConnections::from(server.upstreams)),
-        };
-
-        Ok(NamedServer(
-            server.server_name,
-            Server {
-                ssl: server.ssl,
-                load_balancer,
-            },
-        ))
     }
 }
 

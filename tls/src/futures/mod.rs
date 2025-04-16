@@ -553,7 +553,7 @@ where
     /// A `Poll` indicating the result of the close operation.
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if self.state.writeable() {
-            // TODO: Send close notify
+            self.session.send_close_notify();
             self.state.shutdown_write();
         }
 
@@ -856,12 +856,12 @@ where
                 err,
             } => loop {
                 match alert.write(&mut WriteSyncConverter { io: &mut io, cx }) {
-                    Ok(_) => (),
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                         *this = MidHandshake::SendAlert { io, alert, err };
                         return Poll::Pending;
                     }
                     Err(_) | Ok(0) => return Poll::Ready(Err((err, io))),
+                    Ok(_) => (),
                 }
             },
             MidHandshake::Error { io, error } => return Poll::Ready(Err((error, io))),

@@ -27,6 +27,15 @@ impl ServerCertificateResolver for CertificateResolver {
     }
 }
 
+impl Default for CertificateResolver {
+    /// Creates a default instance of `CertificateResolver`.
+    ///
+    /// # Returns
+    /// A new instance of `CertificateResolver` with an empty certificate map.
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl CertificateResolver {
     /// Creates a new `CertificateResolver`.
     ///

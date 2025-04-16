@@ -5,11 +5,22 @@ services:
     build:
       context: ./heavy-app
     ports:
-      - 3001:3001
+      - "3000"
+      - "2749/udp"
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=3000
     command: node index.js
+    networks:
+      agent-net:
+        ipv4_address: 172.18.0.10
+
+  agent-0:
+    image: fluxgate-agent
+    container_name: agent-0
+    build:
+      context: ./agent
+    network_mode: service:heavy-app-0
 
   heavy-app-1:
     image: fluxgate-heavy-app
@@ -17,8 +28,26 @@ services:
     build:
       context: ./heavy-app
     ports:
-      - 3000:3001
+      - "3000"
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=3000
     command: node index.js
+    networks:
+      agent-net:
+        ipv4_address: 172.18.0.11
+
+  agent-1:
+    image: fluxgate-agent
+    container_name: agent-1
+    build:
+      context: ./agent
+    network_mode: service:heavy-app-1
+
+networks:
+  agent-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/24
+          gateway: 172.18.0.1

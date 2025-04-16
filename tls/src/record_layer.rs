@@ -54,7 +54,7 @@ impl RecordLayer {
     /// * `encrypter` - The encrypter to use.
     pub(crate) fn prepare_encrypter(&mut self, encrypter: Box<dyn MessageEncrypter>) {
         self.message_encrypter = encrypter;
-        self.encrypt_state = EncryptionState::Prepared;
+        self.encrypt_state = EncryptionState::Active;
     }
 
     /// Prepares the decrypter for use.

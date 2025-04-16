@@ -1,7 +1,7 @@
 [
     Server(
         server_name: "heavy.local",
-        load_balancer: LeastConnections,
-        upstreams: ["127.0.0.1:3000", "127.0.0.1:3001"]
+        load_balancer: ResourceBased,
+        upstreams: ["172.18.0.10:3000", "172.18.0.11:3000"]
     ),
 ]
