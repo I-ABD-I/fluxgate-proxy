@@ -22,3 +22,4 @@ thiserror = "2.0.12"
 # Own Deps
 agent = { path = "./agent" }
 tls = { path = "./tls" }
+layered = { path = "./layered" }

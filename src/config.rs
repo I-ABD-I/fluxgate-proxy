@@ -1,20 +1,32 @@
 use crate::cert_resolver::CertificateResolver;
+use crate::controller::middleware::analytics;
+use crate::error::MiddlewareError;
 use crate::load_balancers;
 use crate::load_balancers::{LeastConnections, ResourceBased, RoundRobin};
+use layered::service::Service;
+use layered::ServiceBuilder;
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
+use std::path::Path;
 use std::sync::Arc;
-use std::{net::SocketAddr, path::PathBuf};
+use std::{fmt, net::SocketAddr, path::PathBuf};
 use tls::config::ServerConfig;
 use tls::pki_types::pem::PemObject;
 use tls::pki_types::{CertificateDer, PrivateKeyDer};
-/// Configuration for the server, represented as a map of server names to server configurations.
-#[derive(Debug)]
-pub struct Config(HashMap<String, Server>);
 
-impl Deref for Config {
-    type Target = HashMap<String, Server>;
+/// Configuration for the server, represented as a map of server names to server configurations.
+pub struct Config<Middleware>(HashMap<String, Server<Middleware>>);
+
+impl<T> Debug for Config<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.0.iter()).finish()
+    }
+}
+
+impl<Middleware> Deref for Config<Middleware> {
+    type Target = HashMap<String, Server<Middleware>>;
 
     /// Dereferences the `Config` to access the underlying `HashMap`.
     fn deref(&self) -> &Self::Target {
@@ -22,19 +34,35 @@ impl Deref for Config {
     }
 }
 
-impl DerefMut for Config {
+impl<Middleware> DerefMut for Config<Middleware> {
     /// Dereferences the `Config` to access the underlying `HashMap` mutably.
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl Config {
-    pub async fn read_from_file(path: &PathBuf) -> anyhow::Result<Self> {
+fn build_middleware(
+) -> impl for<'a> Service<&'a [u8], Error = MiddlewareError, Response = ()> + Clone + Send {
+    ServiceBuilder::new()
+        .layer(analytics())
+        .build::<MiddlewareError>()
+}
+
+impl Config<()> {
+    pub async fn read_from_file(
+        path: &Path,
+    ) -> anyhow::Result<
+        Config<
+            impl for<'a> Service<&'a [u8], Error = MiddlewareError, Response = ()> + Clone + Send,
+        >,
+    > {
         let servers: Vec<helper::Server> =
             ron::from_str(&async_std::fs::read_to_string(path).await?)?;
 
         let mut map = HashMap::new();
+
+        // DEFAULT MIDDLEWARE TODO: CHANGE THIS
+        let middleware = build_middleware();
 
         for server in servers {
             let load_balancer: Box<dyn load_balancers::LoadBalancer> = match server.load_balancer {
@@ -50,13 +78,15 @@ impl Config {
                 Server {
                     ssl: server.ssl,
                     load_balancer,
+                    middleware: middleware.clone(),
                 },
             );
         }
 
-        Ok(Self(map))
+        Ok(Config(map))
     }
-
+}
+impl<Middleware> Config<Middleware> {
     /// Returns an iterator over servers that have TLS enabled.
     ///
     /// # Returns
@@ -85,15 +115,24 @@ impl Config {
 }
 
 /// Configuration for an individual server.
-#[derive(Debug)]
-pub struct Server {
+pub struct Server<Middleware> {
     /// Optional SSL configuration for the server.
     pub ssl: Option<SSLConfig>,
     /// Load balancer used by the server.
     pub load_balancer: Box<dyn load_balancers::LoadBalancer>,
+    pub middleware: Middleware,
 }
 
-impl Server {
+impl<Middleware> Debug for Server<Middleware> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Server")
+            .field("ssl", &self.ssl)
+            .field("load_balancer", &self.load_balancer)
+            .finish()
+    }
+}
+
+impl<Middleware> Server<Middleware> {
     /// Checks if the server should decrypt incoming connections.
     ///
     /// # Returns

@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     create_logger(cli.verbose, false)?;
 
-    let cfg = Config::read_from_file(&cli.config).await?;
+    let cfg = Config::<()>::read_from_file(&cli.config).await?;
     debug!("Loaded CLI config {cli:#?}");
     debug!("Loaded config file {}, {cfg:#?}", cli.config.display());
 

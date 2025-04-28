@@ -1,29 +1,33 @@
+pub use crate::util::IdentityService;
 use layer::Layer;
-use util::{Either, Identity, ServiceFn, Stack};
+use util::{Either, IdentityLayer, ServiceFn, Stack};
 
 pub mod layer;
 pub mod service;
 mod util;
+
 
 /// A builder for composing layers and services.
 pub struct ServiceBuilder<L> {
     inner: L,
 }
 
-impl Default for ServiceBuilder<Identity> {
+impl Default for ServiceBuilder<IdentityLayer> {
     /// Creates a new `ServiceBuilder` with the `Identity` layer.
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ServiceBuilder<Identity> {
+impl ServiceBuilder<IdentityLayer> {
     /// Creates a new `ServiceBuilder` with the `Identity` layer.
     ///
     /// # Returns
     /// A new instance of `ServiceBuilder` with the `Identity` layer.
     pub const fn new() -> Self {
-        Self { inner: Identity }
+        Self {
+            inner: IdentityLayer,
+        }
     }
 }
 
@@ -51,10 +55,10 @@ impl<L> ServiceBuilder<L> {
     pub fn option_layer<T>(
         self,
         layer: Option<T>,
-    ) -> ServiceBuilder<util::Stack<Either<T, Identity>, L>> {
+    ) -> ServiceBuilder<util::Stack<Either<T, IdentityLayer>, L>> {
         let inner = match layer {
             Some(layer) => Either::Left(layer),
-            None => Either::Right(Identity),
+            None => Either::Right(IdentityLayer),
         };
         ServiceBuilder {
             inner: Stack::new(inner, self.inner),
@@ -87,5 +91,12 @@ impl<L> ServiceBuilder<L> {
         L: Layer<ServiceFn<F>>,
     {
         self.inner.layer(ServiceFn::new(f))
+    }
+
+    pub fn build<T>(&self) -> L::Service
+    where
+        L: Layer<IdentityService<T>>,
+    {
+        self.inner.layer(IdentityService::default())
     }
 }

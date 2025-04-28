@@ -323,7 +323,7 @@ impl TlsState {
             (true, _) => Ok(()),
             (false, true) => Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
-                "unexpected EOF during handshake",
+                "unexpected EOF",
             )),
             (false, false) => Err(io::ErrorKind::WouldBlock.into()),
         }

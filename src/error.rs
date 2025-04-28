@@ -9,3 +9,7 @@ pub struct ServerNotFound;
 #[derive(Debug, Error)]
 #[error("unable to find upstream")]
 pub struct UnableToFindUpstream;
+
+#[derive(Clone, Debug, Error)]
+#[error("Middleware Error")]
+pub struct MiddlewareError;

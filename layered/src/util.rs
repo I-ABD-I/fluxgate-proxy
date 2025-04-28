@@ -1,10 +1,12 @@
 use super::{layer::Layer, service::Service};
 use std::future::Future;
+use std::marker::PhantomData;
 
 /// A struct representing the identity layer which does not modify the service.
-pub struct Identity;
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IdentityLayer;
 
-impl<S> Layer<S> for Identity {
+impl<S> Layer<S> for IdentityLayer {
     type Service = S;
 
     /// Wraps the given service with the identity layer.
@@ -16,6 +18,41 @@ impl<S> Layer<S> for Identity {
     /// The same service without any modifications.
     fn layer(&self, service: S) -> Self::Service {
         service
+    }
+}
+
+#[derive(Clone)]
+pub struct IdentityService<Error>(PhantomData<Error>);
+
+impl<Error> Default for IdentityService<Error> {
+    /// Creates a new `IdentityService` instance.
+    ///
+    /// # Arguments
+    /// * `error` - The error type to be used.
+    ///
+    /// # Returns
+    /// A new instance of `IdentityService`.
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+impl<Request, Error> Service<Request> for IdentityService<Error>
+where
+    Request: Send,
+    Error: Send,
+{
+    type Response = ();
+    type Error = Error;
+
+    /// Processes the given request asynchronously by returning it unchanged.
+    ///
+    /// # Arguments
+    /// * `req` - The request to be processed.
+    ///
+    /// # Returns
+    /// A future that resolves to the unchanged request.
+    async fn call(&mut self, _: Request) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 

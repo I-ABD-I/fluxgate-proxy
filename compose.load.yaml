@@ -29,6 +29,7 @@ services:
       context: ./heavy-app
     ports:
       - "3000"
+      - "2749/udp"
     environment:
       - NODE_ENV=production
       - PORT=3000
