@@ -1,0 +1,23 @@
+[package]
+name = "gui"
+version = "0.1.0"
+authors = ["Aylon Ben Dvora <70889286+I-ABD-I@users.noreply.github.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dioxus = { version = "0.6.0", features = [] }
+fluxgate = { path = "../", features = ["config"], default-features = false }
+ron = "0.8.1"
+rfd = { version = "*", features = [
+    "tokio",
+    "xdg-portal",
+], default-features = false }
+dioxus-free-icons = { version = "0.9", features = ["bootstrap"] }
+
+[features]
+default = ["desktop"]
+web = ["dioxus/web"]
+desktop = ["dioxus/desktop"]
+mobile = ["dioxus/mobile"]

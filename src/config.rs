@@ -1,32 +1,54 @@
+#[cfg(not(feature = "config"))]
 use crate::cert_resolver::CertificateResolver;
+#[cfg(not(feature = "config"))]
 use crate::controller::middleware::analytics;
+#[cfg(not(feature = "config"))]
 use crate::error::MiddlewareError;
+#[cfg(not(feature = "config"))]
 use crate::load_balancers;
+#[cfg(not(feature = "config"))]
 use crate::load_balancers::{LeastConnections, ResourceBased, RoundRobin};
+#[cfg(not(feature = "config"))]
 use async_std::sync::Mutex;
+#[cfg(not(feature = "config"))]
 use layered::service::Service;
+#[cfg(not(feature = "config"))]
 use layered::ServiceBuilder;
+#[cfg(not(feature = "config"))]
 use log::error;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
+#[cfg(not(feature = "config"))]
 use std::collections::HashMap;
+#[cfg(not(feature = "config"))]
+use std::fmt;
 use std::fmt::Debug;
+use std::net::SocketAddr;
+#[cfg(not(feature = "config"))]
 use std::ops::{Deref, DerefMut};
+#[cfg(not(feature = "config"))]
 use std::path::Path;
+use std::path::PathBuf;
+#[cfg(not(feature = "config"))]
 use std::sync::Arc;
-use std::{fmt, net::SocketAddr, path::PathBuf};
+#[cfg(not(feature = "config"))]
 use tls::config::ServerConfig;
+#[cfg(not(feature = "config"))]
 use tls::pki_types::pem::PemObject;
+#[cfg(not(feature = "config"))]
 use tls::pki_types::{CertificateDer, PrivateKeyDer};
 
 /// Configuration for the server, represented as a map of server names to server configurations.
+#[cfg(not(feature = "config"))]
 pub struct Config<Middleware>(HashMap<Arc<str>, Server<Middleware>>);
 
+#[cfg(not(feature = "config"))]
 impl<T> Debug for Config<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.0.iter()).finish()
     }
 }
 
+#[cfg(not(feature = "config"))]
 impl<Middleware> Deref for Config<Middleware> {
     type Target = HashMap<Arc<str>, Server<Middleware>>;
 
@@ -36,6 +58,7 @@ impl<Middleware> Deref for Config<Middleware> {
     }
 }
 
+#[cfg(not(feature = "config"))]
 impl<Middleware> DerefMut for Config<Middleware> {
     /// Dereferences the `Config` to access the underlying `HashMap` mutably.
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -43,6 +66,7 @@ impl<Middleware> DerefMut for Config<Middleware> {
     }
 }
 
+#[cfg(not(feature = "config"))]
 fn build_middleware<'b>(
     analytics_channel: Option<Arc<Mutex<async_std::process::ChildStdin>>>,
     server_name: Arc<str>,
@@ -53,6 +77,7 @@ fn build_middleware<'b>(
         .build::<MiddlewareError>()
 }
 
+#[cfg(not(feature = "config"))]
 impl Config<()> {
     pub async fn read_from_file(
         path: &Path,
@@ -67,7 +92,7 @@ impl Config<()> {
         let mut map = HashMap::new();
 
         let python_exe = std::env::var("PYTHON").ok();
-        let python= python_exe.as_deref().unwrap_or("python");
+        let python = python_exe.as_deref().unwrap_or("python");
         let child = async_std::process::Command::new(python)
             .arg("db_writer.py")
             .stdin(async_std::process::Stdio::piped())
@@ -115,6 +140,8 @@ impl Config<()> {
         Ok(Config(map))
     }
 }
+
+#[cfg(not(feature = "config"))]
 impl<Middleware> Config<Middleware> {
     /// Returns an iterator over servers that have TLS enabled.
     ///
@@ -144,6 +171,7 @@ impl<Middleware> Config<Middleware> {
 }
 
 /// Configuration for an individual server.
+#[cfg(not(feature = "config"))]
 pub struct Server<Middleware> {
     /// Optional SSL configuration for the server.
     pub ssl: Option<SSLConfig>,
@@ -152,6 +180,7 @@ pub struct Server<Middleware> {
     pub middleware: Middleware,
 }
 
+#[cfg(not(feature = "config"))]
 impl<Middleware> Debug for Server<Middleware> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Server")
@@ -161,6 +190,7 @@ impl<Middleware> Debug for Server<Middleware> {
     }
 }
 
+#[cfg(not(feature = "config"))]
 impl<Middleware> Server<Middleware> {
     /// Checks if the server should decrypt incoming connections.
     ///
@@ -172,7 +202,7 @@ impl<Middleware> Server<Middleware> {
 }
 
 /// SSL configuration for a server.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SSLConfig {
     /// Path to the SSL certificate file.
     pub ssl_certificate: PathBuf,
@@ -189,11 +219,22 @@ pub struct Upstream {
 }
 
 /// Enumeration of available load balancers.
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-enum LoadBalancer {
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub enum LoadBalancer {
     RoundRobin,
     LeastConnections,
     ResourceBased,
+}
+
+impl ToString for LoadBalancer {
+    fn to_string(&self) -> String {
+        match self {
+            LoadBalancer::RoundRobin => "RoundRobin",
+            LoadBalancer::LeastConnections => "LeastConnections",
+            LoadBalancer::ResourceBased => "ResouceBased",
+        }
+        .to_string()
+    }
 }
 
 impl Default for LoadBalancer {
@@ -223,11 +264,20 @@ impl<'de> Deserialize<'de> for Upstream {
     }
 }
 
-mod helper {
+impl Serialize for Upstream {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Ok(self.addr.serialize(serializer)?)
+    }
+}
+
+pub mod helper {
     use super::*;
 
     /// Helper struct for deserializing server configurations.
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize, Default)]
     pub struct Server {
         /// Name of the server.
         pub server_name: String,
