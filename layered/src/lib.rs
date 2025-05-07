@@ -6,7 +6,6 @@ pub mod layer;
 pub mod service;
 mod util;
 
-
 /// A builder for composing layers and services.
 pub struct ServiceBuilder<L> {
     inner: L,

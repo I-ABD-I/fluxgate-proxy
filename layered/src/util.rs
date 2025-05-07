@@ -97,6 +97,7 @@ where
 }
 
 /// An enum representing either one of two possible services.
+#[derive(Clone, Copy, Debug)]
 pub enum Either<A, B> {
     Left(A),
     Right(B),
@@ -122,6 +123,21 @@ where
         match self {
             Either::Left(a) => a.call(req).await,
             Either::Right(b) => b.call(req).await,
+        }
+    }
+}
+
+impl<S, A, B> Layer<S> for Either<A, B>
+where
+    A: Layer<S>,
+    B: Layer<S>,
+{
+    type Service = Either<A::Service, B::Service>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        match self {
+            Either::Left(a) => Either::Left(a.layer(service)),
+            Either::Right(b) => Either::Right(b.layer(service)),
         }
     }
 }

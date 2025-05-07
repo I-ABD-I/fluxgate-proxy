@@ -44,7 +44,7 @@ services:
     build:
       context: ./agent
     network_mode: service:heavy-app-1
-
+    
 networks:
   agent-net:
     driver: bridge

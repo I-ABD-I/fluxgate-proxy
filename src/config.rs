@@ -3,8 +3,10 @@ use crate::controller::middleware::analytics;
 use crate::error::MiddlewareError;
 use crate::load_balancers;
 use crate::load_balancers::{LeastConnections, ResourceBased, RoundRobin};
+use async_std::sync::Mutex;
 use layered::service::Service;
 use layered::ServiceBuilder;
+use log::error;
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -17,7 +19,7 @@ use tls::pki_types::pem::PemObject;
 use tls::pki_types::{CertificateDer, PrivateKeyDer};
 
 /// Configuration for the server, represented as a map of server names to server configurations.
-pub struct Config<Middleware>(HashMap<String, Server<Middleware>>);
+pub struct Config<Middleware>(HashMap<Arc<str>, Server<Middleware>>);
 
 impl<T> Debug for Config<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -26,7 +28,7 @@ impl<T> Debug for Config<T> {
 }
 
 impl<Middleware> Deref for Config<Middleware> {
-    type Target = HashMap<String, Server<Middleware>>;
+    type Target = HashMap<Arc<str>, Server<Middleware>>;
 
     /// Dereferences the `Config` to access the underlying `HashMap`.
     fn deref(&self) -> &Self::Target {
@@ -41,10 +43,13 @@ impl<Middleware> DerefMut for Config<Middleware> {
     }
 }
 
-fn build_middleware(
-) -> impl for<'a> Service<&'a [u8], Error = MiddlewareError, Response = ()> + Clone + Send {
+fn build_middleware<'b>(
+    analytics_channel: Option<Arc<Mutex<async_std::process::ChildStdin>>>,
+    server_name: Arc<str>,
+) -> impl for<'a> Service<&'a [u8], Error = MiddlewareError, Response = ()> + Clone + Send + use<'b>
+{
     ServiceBuilder::new()
-        .layer(analytics())
+        .option_layer(analytics_channel.map(|channel| analytics(channel, server_name)))
         .build::<MiddlewareError>()
 }
 
@@ -61,24 +66,48 @@ impl Config<()> {
 
         let mut map = HashMap::new();
 
-        // DEFAULT MIDDLEWARE TODO: CHANGE THIS
-        let middleware = build_middleware();
+        let python_exe = std::env::var("PYTHON").ok();
+        let python= python_exe.as_deref().unwrap_or("python");
+        let child = async_std::process::Command::new(python)
+            .arg("db_writer.py")
+            .stdin(async_std::process::Stdio::piped())
+            .stdout(async_std::process::Stdio::inherit())
+            .spawn();
+
+        let analytics_channel = match child {
+            Ok(mut child) => child.stdin.take(),
+            Err(r) => {
+                error!("Failed to spawn child process: {r}");
+                None
+            }
+        };
+
+        let analytics_channel = analytics_channel.map(|channel| Arc::new(Mutex::new(channel)));
 
         for server in servers {
-            let load_balancer: Box<dyn load_balancers::LoadBalancer> = match server.load_balancer {
-                LoadBalancer::RoundRobin => Box::new(RoundRobin::from(server.upstreams)),
-                LoadBalancer::LeastConnections => {
-                    Box::new(LeastConnections::from(server.upstreams))
-                }
-                LoadBalancer::ResourceBased => Box::new(ResourceBased::from(server.upstreams)),
+            let helper::Server {
+                server_name,
+                ssl,
+                load_balancer,
+                upstreams,
+            } = server;
+
+            let server_name: Arc<str> = Arc::from(server_name.to_lowercase());
+
+            let load_balancer: Box<dyn load_balancers::LoadBalancer> = match load_balancer {
+                LoadBalancer::RoundRobin => Box::new(RoundRobin::from(upstreams)),
+                LoadBalancer::LeastConnections => Box::new(LeastConnections::from(upstreams)),
+                LoadBalancer::ResourceBased => Box::new(ResourceBased::from(upstreams)),
             };
 
+            let middleware = build_middleware(analytics_channel.clone(), server_name.clone());
+
             map.insert(
-                server.server_name,
+                server_name,
                 Server {
-                    ssl: server.ssl,
+                    ssl,
                     load_balancer,
-                    middleware: middleware.clone(),
+                    middleware,
                 },
             );
         }
