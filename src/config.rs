@@ -97,7 +97,7 @@ impl Config<()> {
             .arg("db_writer.py")
             .stdin(async_std::process::Stdio::piped())
             .stdout(async_std::process::Stdio::null())
-            .stderr(async_std::process::Stdio::null())
+            .stderr(async_std::process::Stdio::inherit())
             .spawn();
 
         let analytics_channel = match child {

@@ -47,6 +47,7 @@ class Server:
     def __init__(self):
         self.new_connections = 0
         self.log = []
+        self.start_timer()
 
     def connect(self):
         self.new_connections += 1
