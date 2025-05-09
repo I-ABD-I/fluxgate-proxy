@@ -1,4 +1,7 @@
-workspace = { members = ["agent", "layered", "tls", "gui"] }
+[workspace]
+members = ["agent", "layered", "tls", "gui"]
+
+
 [package]
 name = "fluxgate"
 version = "0.1.0"

@@ -14,7 +14,12 @@ rfd = { version = "*", features = [
     "tokio",
     "xdg-portal",
 ], default-features = false }
-dioxus-free-icons = { version = "0.9", features = ["bootstrap"] }
+async-process = "*"
+futures-lite = "*"
+ansi-to-html = "0.2"
+firestore = "0.45.0"
+serde = "*"
+
 
 [features]
 default = ["desktop"]

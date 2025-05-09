@@ -16,7 +16,7 @@
     --radius-3xl: 1.5rem;
     --default-font-family: var(--font-sans);
     --default-mono-font-family: var(--font-mono);
-    --color-primary-700: hsl(206, 32%, 30%);
+    --color-primary-800: hsl(206, 31%, 20%);
     --color-secondary-700: hsl(206, 35%, 30%);
     --color-text: #e8edf1;
     --color-background: #06090b;
@@ -184,11 +184,32 @@
   .flex {
     display: flex;
   }
+  .table {
+    display: table;
+  }
+  .h-1 {
+    height: calc(var(--spacing) * 1);
+  }
+  .h-12 {
+    height: calc(var(--spacing) * 12);
+  }
+  .h-full {
+    height: 100%;
+  }
+  .max-h-\[10vh\] {
+    max-height: 10vh;
+  }
+  .max-h-\[50vh\] {
+    max-height: 50vh;
+  }
   .max-h-\[70vh\] {
     max-height: 70vh;
   }
-  .min-h-10 {
-    min-height: calc(var(--spacing) * 10);
+  .max-h-\[80vh\] {
+    max-height: 80vh;
+  }
+  .min-h-\[10vh\] {
+    min-height: 10vh;
   }
   .min-h-screen {
     min-height: 100vh;
@@ -198,6 +219,18 @@
   }
   .w-7\/8 {
     width: calc(7/8 * 100%);
+  }
+  .w-12 {
+    width: calc(var(--spacing) * 12);
+  }
+  .w-\[calc\(100\%-2rem\)\] {
+    width: calc(100% - 2rem);
+  }
+  .w-\[calc\(100\%-10rem\)\] {
+    width: calc(100% - 10rem);
+  }
+  .w-full {
+    width: 100%;
   }
   .max-w-77 {
     max-width: calc(var(--spacing) * 77);
@@ -214,6 +247,12 @@
   .flex-1 {
     flex: 1;
   }
+  .table-auto {
+    table-layout: auto;
+  }
+  .border-collapse {
+    border-collapse: collapse;
+  }
   .list-disc {
     list-style-type: disc;
   }
@@ -225,6 +264,9 @@
   }
   .items-center {
     align-items: center;
+  }
+  .justify-center {
+    justify-content: center;
   }
   .truncate {
     overflow: hidden;
@@ -274,8 +316,11 @@
       background-color: color-mix(in oklab, var(--color-white) 3%, transparent);
     }
   }
-  .fill-primary-700 {
-    fill: var(--color-primary-700);
+  .fill-primary-800\/80 {
+    fill: color-mix(in srgb, hsl(206, 31%, 20%) 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      fill: color-mix(in oklab, var(--color-primary-800) 80%, transparent);
+    }
   }
   .p-2 {
     padding: calc(var(--spacing) * 2);
@@ -294,6 +339,9 @@
   }
   .py-2 {
     padding-block: calc(var(--spacing) * 2);
+  }
+  .text-center {
+    text-align: center;
   }
   .text-text {
     color: var(--color-text);

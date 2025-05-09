@@ -1,0 +1,1 @@
+[(server_name:"clicker.local",ssl:Some((ssl_certificate:"/home/aylon/Shared/fluxgate/certificates/clicker-cert.pem",ssl_certificate_key:"/home/aylon/Shared/fluxgate/certificates/clicker-key.pem")),upstreams:["127.0.0.1:3000"],load_balancer:RoundRobin)]
