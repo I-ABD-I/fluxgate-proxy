@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FAVICON","TAILWIND_CSS"],"enum":["Tab"],"fn":["App","Footer","Header","main"],"mod":["db","log","settings"],"struct":["FooterProps","HeaderProps"]};
+window.SIDEBAR_ITEMS = {"constant":["CONFIG_FILE","FAVICON","TAILWIND_CSS"],"enum":["Tab"],"fn":["App","Footer","Header","main"],"mod":["db","log","settings"],"struct":["FooterProps","HeaderProps"]};
