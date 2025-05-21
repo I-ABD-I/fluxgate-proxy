@@ -8,12 +8,6 @@
 /// * `'a`: The lifetime associated with the input data, primarily for the `Reader`
 ///   in the `read` method.
 pub trait Codec<'a>: Sized {
-    /// Encodes the current instance into a byte vector.
-    ///
-    /// # Arguments
-    ///
-    /// * `bytes`: A mutable reference to a `Vec<u8>` where the encoded
-    ///   bytes will be appended.
     fn encode(&self, bytes: &mut Vec<u8>);
 
     /// Reads from a `Reader` and attempts to decode into an instance of `Self`.
@@ -66,16 +60,21 @@ impl<'a> Reader<'a> {
     /// * `Some(&'a [u8])`: A slice of the buffer of the specified `length` if successful.
     /// * `None`: If `length` is greater than the number of bytes remaining in the buffer.
     fn take(&mut self, length: usize) -> Option<&'a [u8]> {
-        // ...
+        if self.left() < length {
+            return None;
+        }
+        let curr = self.cursor;
+        self.cursor += length;
+        Some(&self.buffer[curr..self.cursor])
     }
 
     /// Returns the number of bytes remaining in the buffer from the current cursor position.
     ///
     /// # Returns
     ///
-    /// * `usize`: The count of bytes that have not yet been read.
+    /// * `usize`: The number of bytes left in the buffer.
     pub fn left(&self) -> usize {
-        // ...
+        self.buffer.len() - self.cursor
     }
 }
 
@@ -91,7 +90,7 @@ pub enum MessageType {
 
     /// Represents a metrics message.
     Metrics,
-    /// Represents an unknown or unsupported value, storing the raw byte.
+    /// Represents an unknown message type.
     Unknown(u8),
 }
 
@@ -157,8 +156,7 @@ pub enum Message {
     Disconnect,
     /// Represents an acknowledgment message.
     Ack,
-
-    /// Represents metrics data.
+    /// Represents a metrics message.
     Metrics(Metrics),
 }
 
