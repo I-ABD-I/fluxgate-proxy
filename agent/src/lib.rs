@@ -1,7 +1,40 @@
+/// Represents a type that can be encoded into and decoded from a byte stream.
+///
+/// This trait is generic over a lifetime `'a`, which is typically associated
+/// with the input buffer when decoding.
+///
+/// # Type Parameters
+///
+/// * `'a`: The lifetime associated with the input data, primarily for the `Reader`
+///   in the `read` method.
 pub trait Codec<'a>: Sized {
+    /// Encodes the current instance into a byte vector.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes`: A mutable reference to a `Vec<u8>` where the encoded
+    ///   bytes will be appended.
     fn encode(&self, bytes: &mut Vec<u8>);
+
+    /// Reads from a `Reader` and attempts to decode into an instance of `Self`.
+    ///
+    /// # Arguments
+    ///
+    /// * `r`: A mutable reference to a `Reader` from which bytes will be read.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, InvalidMessage>`:
+    ///   - `Ok(Self)` if decoding is successful, containing the decoded instance.
+    ///   - `Err(InvalidMessage)` if the input data is malformed or cannot be
+    ///     decoded into `Self`.
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
 }
+
+/// A struct for reading data from a byte slice.
+///
+/// `Reader` provides a way to read data sequentially from an underlying byte buffer.
+/// It keeps track of the current position within the buffer using a cursor.
 pub struct Reader<'a> {
     buffer: &'a [u8],
     cursor: usize,
@@ -13,28 +46,52 @@ impl<'a> From<&'a [u8]> for Reader<'a> {
     }
 }
 
+/// Implements methods for a `Reader` struct, which is designed to read data from a byte buffer.
+///
+/// The `Reader` keeps track of the current position within the buffer, allowing for sequential
+/// consumption of data.
 impl<'a> Reader<'a> {
+    /// Attempts to take a slice of `length` bytes from the current cursor position.
+    ///
+    /// If the remaining number of bytes in the buffer is less than `length`,
+    /// this method returns `None`. Otherwise, it returns `Some` containing a slice
+    /// of the requested `length` and advances the internal cursor by `length`.
+    ///
+    /// # Arguments
+    ///
+    /// * `length`: The number of bytes to take from the buffer.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(&'a [u8])`: A slice of the buffer of the specified `length` if successful.
+    /// * `None`: If `length` is greater than the number of bytes remaining in the buffer.
     fn take(&mut self, length: usize) -> Option<&'a [u8]> {
-        if self.left() < length {
-            return None;
-        }
-        let curr = self.cursor;
-        self.cursor += length;
-        Some(&self.buffer[curr..self.cursor])
+        // ...
     }
 
+    /// Returns the number of bytes remaining in the buffer from the current cursor position.
+    ///
+    /// # Returns
+    ///
+    /// * `usize`: The count of bytes that have not yet been read.
     pub fn left(&self) -> usize {
-        self.buffer.len() - self.cursor
+        // ...
     }
 }
 
 #[repr(u8)]
+/// Represents the type of message being sent or received.
 pub enum MessageType {
+    /// Represents a connection request.
     Connect,
+    /// Represents a disconnection request.
     Disconnect,
+    /// Represents an acknowledgment message.
     Ack,
 
+    /// Represents a metrics message.
     Metrics,
+    /// Represents an unknown or unsupported value, storing the raw byte.
     Unknown(u8),
 }
 
@@ -73,13 +130,17 @@ impl Codec<'_> for f32 {
 }
 
 #[derive(Debug)]
+/// Represents system metrics.
+///
+/// This struct holds various performance and usage metrics collected from the system.
 pub struct Metrics {
+    /// The CPU usage as a percentage.
     pub cpu: f32,
 }
 
 impl Codec<'_> for Metrics {
-    fn encode(&self, bytse: &mut Vec<u8>) {
-        self.cpu.encode(bytse);
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cpu.encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
@@ -88,15 +149,33 @@ impl Codec<'_> for Metrics {
     }
 }
 
+/// Represents a message that can be sent or received.
 pub enum Message {
+    /// Represents a connection request.
     Connect,
+    /// Represents a disconnection request.
     Disconnect,
+    /// Represents an acknowledgment message.
     Ack,
 
+    /// Represents metrics data.
     Metrics(Metrics),
 }
 
 impl Message {
+    /// Returns the [`MessageType`] corresponding to this `Message` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming Message and MessageType enums are defined elsewhere
+    /// // and Message::Connect and MessageType::Connect exist.
+    /// let message = Message::Connect;
+    /// assert_eq!(message.typ(), MessageType::Connect);
+    ///
+    /// let metrics_message = Message::Metrics(Vec::new()); // Assuming Metrics takes some data
+    /// assert_eq!(metrics_message.typ(), MessageType::Metrics);
+    /// ```
     pub fn typ(&self) -> MessageType {
         match self {
             Self::Connect => MessageType::Connect,
@@ -126,4 +205,6 @@ impl Codec<'_> for Message {
         }
     }
 }
+
+/// Represents an error that occurs when decoding a message.
 pub struct InvalidMessage;

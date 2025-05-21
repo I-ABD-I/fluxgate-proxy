@@ -13,8 +13,14 @@ mod db;
 mod log;
 mod settings;
 
+/// The path to the favicon asset.
 const FAVICON: Asset = asset!("/assets/favicon.ico");
+/// The path to the Tailwind CSS asset.
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+
+/// The path to the configuration file.
+const CONFIG_FILE: &str = "~/.config/fluxgate/config.ron";
+
 
 fn main() {
     #[cfg(feature = "desktop")]
@@ -26,11 +32,14 @@ fn main() {
     dioxus::launch(App);
 }
 
+/// The main application component.
+/// It initializes the application state, including the selected tab,
+/// the settings, and the proxy process.
 #[component]
 fn App() -> Element {
     let mut selected_tab = use_signal(|| Tab::Settings);
 
-    let settings = use_signal(|| match fs::read_to_string("config.ron") {
+    let settings = use_signal(|| match fs::read_to_string(CONFIG_FILE) {
         Ok(str) => ron::from_str(&str).unwrap(),
         Err(_) => Vec::new(),
     });
@@ -65,7 +74,7 @@ fn App() -> Element {
             }
             Footer {
                 play_cb: move |_| {
-                    let mut file = match fs::File::create("config.ron") {
+                    let mut file = match fs::File::create(CONFIG_FILE) {
                         Ok(file) => file,
                         Err(e) => {
                             println!("unable to write config file {e:?}");
@@ -78,7 +87,7 @@ fn App() -> Element {
                         current_log.set(String::default());
                     }
                     let mut child = match Command::new("./fluxgate")
-                        .args(&["-c", "config.ron"])
+                        .args(&["-c", CONFIG_FILE])
                         .env("RUST_LOG_STYLE", "always")
                         .env("CLICOLOR_FORCE", "1")
                         .stdout(Stdio::piped())
@@ -105,11 +114,28 @@ fn App() -> Element {
 }
 
 #[derive(PartialEq, Eq)]
+/// Represents the different tabs in the application.
 enum Tab {
+    /// The settings tab.
     Settings,
+    /// The logs tab.
     Logs,
+    /// The database tab.
     Database,
 }
+
+/// Represents the header of the application.
+/// It contains buttons to switch between different tabs.
+///
+/// # Arguments
+///
+/// * `state`: A signal representing the currently selected tab.
+///   - `Tab::Settings`: The settings tab.
+///   - `Tab::Logs`: The logs tab.
+///   - `Tab::Database`: The database tab.
+///
+/// # Returns
+/// An `Element` representing the header of the application.
 
 #[component]
 fn Header(state: Signal<Tab>) -> Element {
@@ -144,6 +170,15 @@ fn Header(state: Signal<Tab>) -> Element {
         }
     }
 }
+
+/// Represents the footer of the application.
+/// It contains a play button to start the proxy process.
+///
+/// # Arguments
+/// * `play_cb`: A callback function to be called when the play button is clicked.
+///
+/// # Returns
+/// An `Element` representing the footer of the application.
 
 #[component]
 fn Footer(play_cb: EventHandler<Event<MouseData>>) -> Element {

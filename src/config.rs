@@ -67,6 +67,15 @@ impl<Middleware> DerefMut for Config<Middleware> {
 }
 
 #[cfg(not(feature = "config"))]
+/// Builds a middleware for the server using the provided analytics channel and server name.
+///
+/// # Arguments
+/// * `analytics_channel`: An optional channel for analytics.
+/// * `server_name`: The name of the server.
+///
+/// # Returns
+/// A middleware service that can be used for processing requests.
+///
 fn build_middleware<'b>(
     analytics_channel: Option<Arc<Mutex<async_std::process::ChildStdin>>>,
     server_name: Arc<str>,
@@ -79,6 +88,14 @@ fn build_middleware<'b>(
 
 #[cfg(not(feature = "config"))]
 impl Config<()> {
+    /// Creates a new `Config` instance from a file at the specified path.
+    ///
+    /// # Arguments
+    /// * `path`: The path to the configuration file.
+    ///
+    /// # Returns
+    /// A `Result` containing the `Config` instance or an error.
+    ///
     pub async fn read_from_file(
         path: &Path,
     ) -> anyhow::Result<

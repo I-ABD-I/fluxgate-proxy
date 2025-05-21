@@ -10,6 +10,7 @@ pub struct ServerNotFound;
 #[error("unable to find upstream")]
 pub struct UnableToFindUpstream;
 
+/// Error indicating that the middleware failed.
 #[derive(Clone, Debug, Error)]
 #[error("Middleware Error")]
 pub struct MiddlewareError;

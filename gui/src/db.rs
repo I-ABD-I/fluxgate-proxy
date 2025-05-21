@@ -4,6 +4,14 @@ use dioxus::prelude::*;
 use firestore::{FirestoreDb, FirestoreDbOptions, FirestoreTimestamp};
 use serde::{Deserialize, Serialize};
 
+/// Represents the database tab in the GUI.
+/// This tab displays the current state of the database, including the list of
+/// servers and their connection logs.
+/// It allows users to refresh the data displayed in the tab.
+///
+/// # Returns
+/// An `Element` representing the database tab.
+
 #[component]
 pub fn DatabaseTab() -> Element {
     let mut servers: Signal<Option<Vec<Server>>> = use_signal(|| None);
@@ -34,6 +42,12 @@ pub fn DatabaseTab() -> Element {
     }
 }
 
+/// Fetches the current state of the database.
+/// It retrieves the list of servers and their connection logs from the Firestore
+/// database.
+///
+/// # Returns
+/// An `Option<Vec<Server>>` containing the list of servers and their connection
 async fn get_db() -> Option<Vec<Server>> {
     let pid = match env::var("FIREBASE_ID") {
         Ok(s) => s,
@@ -61,6 +75,16 @@ async fn get_db() -> Option<Vec<Server>> {
     )
 }
 
+/// Represents a server widget in the database tab.
+/// This widget displays the server's ID, the number of new connections, and
+/// a table of connection logs.
+///
+/// # Arguments
+/// * `servers`: A signal containing the list of servers.
+/// * `index`: The index of the server in the list.
+///
+/// # Returns
+/// An `Element` representing the server widget.
 #[component]
 fn ServerWidget(servers: Signal<Option<Vec<Server>>>, index: usize) -> Element {
     let servers = servers.read();
@@ -102,6 +126,17 @@ fn ServerWidget(servers: Signal<Option<Vec<Server>>>, index: usize) -> Element {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+/// Represents a server entity stored in the database.
+///
+/// This struct maintains information about a server, including its unique identifier,
+/// connection statistics, and a log of timestamps.
+///
+/// # Fields
+///
+/// * `id` - The unique identifier of the server. When deserializing from Firestore,
+///   this can also be read from the field named "_firestore_id".
+/// * `new_connections` - The count of new connections established to this server.
+/// * `log` - A chronological collection of timestamp entries.
 struct Server {
     #[serde(alias = "_firestore_id")]
     pub id: String,
@@ -110,6 +145,15 @@ struct Server {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+/// Represents a time-based record with an associated length.
+///
+/// # Fields
+///
+/// * `timestamp` - The Firestore timestamp indicating when this record was created or updated.
+/// * `length` - The size or duration of the associated data, measured in units relevant to the context.
+///
+/// This struct is typically used for tracking time-stamped entries in the database
+/// that have an associated size or duration component.
 struct Stamp {
     timestamp: FirestoreTimestamp,
     length: usize,

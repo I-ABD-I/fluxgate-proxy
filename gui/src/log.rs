@@ -3,6 +3,10 @@ use async_process::ChildStdout;
 use dioxus::prelude::*;
 use futures_lite::AsyncReadExt;
 
+/// update_log reads from the stdout of a child process and updates the log
+/// signal with the new log data.
+/// It uses a buffer to read the data in chunks and converts it to HTML
+/// using the `ansi_to_html` crate.
 pub async fn update_log(mut stdout: ChildStdout, mut log: Signal<String>) {
     let mut buf = [0u8; 1024];
     loop {
@@ -23,6 +27,16 @@ pub async fn update_log(mut stdout: ChildStdout, mut log: Signal<String>) {
     }
 }
 
+/// LogsTab is a component that displays the logs of the application.
+/// It takes a `log` signal as a prop, which contains the log data.
+/// The logs are displayed in a `pre` element with a scrollable area.
+///
+/// # Arguments
+///
+/// * `log`: A signal containing the log data as a string.
+///
+/// # Returns
+/// An `Element` representing the logs tab.
 #[component]
 pub fn LogsTab(log: Signal<String>) -> Element {
     rsx! {
