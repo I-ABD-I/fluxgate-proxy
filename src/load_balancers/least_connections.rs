@@ -5,6 +5,12 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]
+
+/// Represents a load balancer that uses the least connections algorithm.
+///
+/// This load balancer directs traffic to the upstream server with the fewest
+/// active connections. It maintains a map of upstream servers and their
+/// corresponding active connection counts.
 pub struct LeastConnections {
     upstreams: HashMap<Upstream, AtomicUsize>,
 }

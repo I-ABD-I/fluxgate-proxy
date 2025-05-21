@@ -21,6 +21,10 @@ impl<S> Layer<S> for IdentityLayer {
     }
 }
 
+/// A struct representing the identity service which does not modify the request.
+///
+/// # Type Parameters
+/// * `Error` - The error type to be used.
 #[derive(Clone)]
 pub struct IdentityService<Error>(PhantomData<Error>);
 

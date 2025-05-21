@@ -4,6 +4,15 @@ use dioxus::prelude::*;
 use fluxgate::config::Upstream;
 use rfd::FileDialog;
 
+/// The SettingsTab component is responsible for rendering the settings tab
+/// of the application. It displays a list of server settings and allows
+/// users to add new servers or modify existing ones.
+///
+/// # Arguments
+/// * `settings` - A signal containing a vector of server settings.
+///
+/// # Returns
+/// An `Element` representing the settings tab.
 #[component]
 pub fn SettingsTab(settings: Signal<Vec<fluxgate::config::helper::Server>>) -> Element {
     rsx! {
@@ -24,6 +33,16 @@ pub fn SettingsTab(settings: Signal<Vec<fluxgate::config::helper::Server>>) -> E
     }
 }
 
+/// The ServerSettings component is responsible for rendering the settings
+/// of a single server. It allows users to modify the server name, SSL
+/// certificate path, SSL key path, load balancer type, and upstreams.
+///
+/// # Arguments
+/// * `settings` - A signal containing a vector of server settings.
+/// * `index` - The index of the server settings in the vector.
+///
+/// # Returns
+/// An `Element` representing the server settings.
 #[component]
 fn ServerSettings(
     settings: Signal<Vec<fluxgate::config::helper::Server>>,
@@ -145,6 +164,14 @@ fn ServerSettings(
     }
 }
 
+/// The try_update_ssl function attempts to update the SSL certificate and
+/// key paths in the server settings. If both paths are valid, it updates
+/// the SSL configuration in the settings.
+///
+/// # Arguments
+/// * `ssl_cert` - A signal containing the SSL certificate path.
+/// * `ssl_key` - A signal containing the SSL key path.
+/// * `settings` - A mutable reference to the server settings.
 fn try_update_ssl(
     ssl_cert: &Signal<String>,
     ssl_key: &Signal<String>,

@@ -9,6 +9,18 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 #[derive(Debug)]
+
+/// Manages a collection of upstream servers and their associated resource metrics,
+/// designed for thread-safe access and modification.
+///
+/// Internally, this struct wraps an `Arc<RwLock<HashMap<Upstream, f32>>>`.
+/// The `HashMap` maps each `Upstream` server to an `f32` value, which typically
+/// represents a resource-based score, load, or capacity metric.
+///
+/// The use of `Arc` allows the server data to be shared across multiple threads,
+/// while `RwLock` ensures that concurrent reads and exclusive writes are handled safely.
+/// This is essential for resource-based load balancers that need to dynamically
+/// update and query server status.
 struct Servers(Arc<RwLock<HashMap<Upstream, f32>>>);
 
 impl Servers {
@@ -32,6 +44,13 @@ impl Deref for Servers {
 }
 
 #[derive(Debug)]
+
+/// A load balancer that distributes requests based on the current resource
+/// utilization of the backend servers.
+///
+/// This strategy aims to send new requests to the server that is currently
+/// the least loaded, thereby optimizing resource usage and potentially
+/// improving response times.
 pub struct ResourceBased {
     servers: Servers,
 }
@@ -55,6 +74,19 @@ impl LoadBalancer for ResourceBased {
     }
 }
 
+/// This function is responsible for sending a connection request to each server
+/// and listening for metrics updates from them.
+/// It uses a `UdpSocket` to communicate with the servers.
+/// The function sends a connection request to each server and waits for metrics
+/// updates.
+/// It updates the CPU usage of each server based on the received metrics.
+/// The function runs indefinitely, continuously updating the server metrics.
+/// It uses an `async` runtime to handle the asynchronous nature of the UDP communication.
+/// The function is designed to be run in a separate thread or task.
+/// The function takes a `Servers` instance as an argument, which contains the
+/// upstream servers and their current CPU usage.
+/// The function returns a `!` type, indicating that it never returns.
+/// The function is marked with `async` to allow for asynchronous operations.
 async fn updater(servers: Servers) -> ! {
     let udp = UdpSocket::bind("0.0.0.0:0").await.unwrap();
 

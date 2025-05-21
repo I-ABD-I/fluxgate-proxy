@@ -6,6 +6,18 @@ use layered::service::Service;
 use log::error;
 use std::sync::Arc;
 
+/// Creates a new `AnalyticsLayer` with the given IPC channel and server name.
+///
+/// # Arguments
+///
+/// * `channel`: An `Arc<Mutex<ChildStdin>>` representing the IPC channel.
+/// * `server_name`: An `Arc<str>` representing the server name.
+///
+/// # Returns
+///
+/// * `AnalyticsLayer`: A new instance of `AnalyticsLayer`.
+///   - This layer is used to send analytics data to a server via the provided IPC channel.
+///   - The `server_name` is used to identify the server in the analytics data. 
 pub fn analytics(
     channel: Arc<Mutex<async_std::process::ChildStdin>>,
     server_name: Arc<str>,
@@ -16,9 +28,19 @@ pub fn analytics(
     }
 }
 
+/// A layer that sends analytics data to a server via IPC.
+///
+/// This layer is used to track connections and data sent to the server.
+/// It sends messages to the server when a new connection is established,
+/// when a connection is closed, and when data is sent.
+/// The messages are sent through the provided IPC channel.
+/// The `server_name` is used to identify the server in the analytics data.
+///
+/// # Fields
+///
+/// * `channel`: An `Arc<Mutex<ChildStdin>>` representing the IPC channel.
+/// * `server_name`: An `Arc<str>` representing the server name.
 pub struct AnalyticsLayer {
-    // This is a placeholder for the actual IPC channel.
-    // In a real-world scenario, this would be replaced with an actual IPC channel.
     channel: Arc<Mutex<async_std::process::ChildStdin>>,
     server_name: Arc<str>,
 }
@@ -34,6 +56,20 @@ impl<S> Layer<S> for AnalyticsLayer {
         }
     }
 }
+
+/// A service that sends analytics data to a server via IPC.
+///
+/// This service is used to track connections and data sent to the server.
+/// It sends messages to the server when a new connection is established,
+/// when a connection is closed, and when data is sent.
+/// The messages are sent through the provided IPC channel.
+/// The `server_name` is used to identify the server in the analytics data.
+///
+/// # Fields
+///
+/// * `server_name`: An `Arc<str>` representing the server name.
+/// * `channel`: An `Arc<Mutex<ChildStdin>>` representing the IPC channel.
+/// * `service`: The underlying service that this analytics service wraps.
 
 pub struct AnalyticsService<S> {
     server_name: Arc<str>,
@@ -81,6 +117,7 @@ where
     }
 }
 
+/// Sends an IPC message to the server via the provided channel.
 async fn write(channel: &Mutex<async_std::process::ChildStdin>, message: IpcMessage<'_>) {
     match message.send(&mut *channel.lock().await).await {
         Ok(_) => {}
@@ -89,29 +126,77 @@ async fn write(channel: &Mutex<async_std::process::ChildStdin>, message: IpcMess
         }
     }
 }
+
+
 mod ipc {
     use async_std::io;
     use futures::AsyncWriteExt;
 
+    /// Represents an IPC message that can be sent to the server.
+    ///
+    /// This enum is used to track connections and data sent to the server.
+    /// It contains three variants:
+    /// - `NewConnection`: Represents a new connection to the server.
+    /// - `ConnectionClosed`: Represents a closed connection to the server.
+    /// - `DataReceived`: Represents data received from the server.
+    /// Each variant contains the server name and, in the case of `DataReceived`,
+    /// the size of the data received.
     pub enum IpcMessage<'a> {
+        /// Represents a new connection to the server.
         NewConnection(&'a str),
+        /// Represents a closed connection to the server.
         ConnectionClosed(&'a str),
+        /// Represents data received from the server.
         DataReceived(&'a str, usize),
     }
 
     impl<'a> IpcMessage<'a> {
+        /// Creates a new IPC message.
+        ///
+        /// # Arguments
+        ///
+        /// * `server_name`: A string slice representing the server name.
+        ///
+        /// # Returns
+        ///
+        /// * `IpcMessage`: A new instance of `IpcMessage` with the specified server name.
         pub fn new_connection(server_name: &'a str) -> Self {
             IpcMessage::NewConnection(server_name)
         }
 
+
+        /// Creates a new IPC message indicating that the connection is closed.
+        ///
+        /// # Arguments
+        ///
+        /// * `server_name`: A string slice representing the server name.
+        ///
+        /// # Returns
+        ///
+        /// * `IpcMessage`: A new instance of `IpcMessage` indicating that the connection is closed.
         pub fn connection_closed(server_name: &'a str) -> Self {
             IpcMessage::ConnectionClosed(server_name)
         }
 
+        /// Creates a new IPC message indicating that data has been received.
+        ///
+        /// # Arguments
+        ///
+        /// * `server_name`: A string slice representing the server name.
+        /// * `size`: The size of the data received.
+        ///
+        /// # Returns
+        ///
+        /// * `IpcMessage`: A new instance of `IpcMessage` indicating that data has been received.
         pub fn data_received(server_name: &'a str, size: usize) -> Self {
             IpcMessage::DataReceived(server_name, size)
         }
 
+        /// gets the name of the server from the IPC message.
+        ///
+        /// # Returns
+        ///
+        /// * `&[u8]`: A byte slice representing the server name.
         fn name(&self) -> &[u8] {
             match self {
                 IpcMessage::NewConnection(name) => name.as_bytes(),
@@ -119,6 +204,18 @@ mod ipc {
                 IpcMessage::DataReceived(name, _) => name.as_bytes(),
             }
         }
+
+        /// Sends the IPC message to the server via the provided channel.
+        ///
+        /// # Arguments
+        ///
+        /// * `channel`: A mutable reference to the IPC channel.
+        ///
+        /// # Returns
+        ///
+        /// * `io::Result<usize>`: The result of the write operation.
+        ///   - `Ok(usize)`: The number of bytes written to the channel.
+        ///   - `Err(io::Error)`: An error occurred while writing to the channel.        
         pub async fn send(
             &self,
             channel: &mut async_std::process::ChildStdin,
