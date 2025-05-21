@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["read_opaque_message_header"],"struct":["BorrowedPayload","DeframerIter","InboundOpaqueMessage","InboundPlainMessage"]};

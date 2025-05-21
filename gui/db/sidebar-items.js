@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["DatabaseTab","ServerWidget","get_db"],"struct":["Server","ServerWidgetProps","Stamp"]};

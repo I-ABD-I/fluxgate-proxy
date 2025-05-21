@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["fluxgate",[["impl&lt;Middleware&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/ops/deref/trait.DerefMut.html\" title=\"trait core::ops::deref::DerefMut\">DerefMut</a> for <a class=\"struct\" href=\"fluxgate/config/struct.Config.html\" title=\"struct fluxgate::config::Config\">Config</a>&lt;Middleware&gt;"]]],["tls",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/ops/deref/trait.DerefMut.html\" title=\"trait core::ops::deref::DerefMut\">DerefMut</a> for <a class=\"struct\" href=\"tls/connection/struct.Connection.html\" title=\"struct tls::connection::Connection\">Connection</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/ops/deref/trait.DerefMut.html\" title=\"trait core::ops::deref::DerefMut\">DerefMut</a> for <a class=\"struct\" href=\"tls/connection/struct.ConnectionCore.html\" title=\"struct tls::connection::ConnectionCore\">ConnectionCore</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/ops/deref/trait.DerefMut.html\" title=\"trait core::ops::deref::DerefMut\">DerefMut</a> for <a class=\"struct\" href=\"tls/futures/struct.ConnectionWrapper.html\" title=\"struct tls::futures::ConnectionWrapper\">ConnectionWrapper</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/ops/deref/trait.DerefMut.html\" title=\"trait core::ops::deref::DerefMut\">DerefMut</a> for <a class=\"struct\" href=\"tls/message/inbound/struct.BorrowedPayload.html\" title=\"struct tls::message::inbound::BorrowedPayload\">BorrowedPayload</a>&lt;'_&gt;"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[332,1241]}

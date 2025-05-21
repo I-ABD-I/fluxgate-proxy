@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_FRAGMENT_LENGTH"],"struct":["Chunker","MessageFragmenter"]};

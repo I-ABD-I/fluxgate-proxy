@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["tls",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/convert/trait.AsRef.html\" title=\"trait core::convert::AsRef\">AsRef</a>&lt;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.87.0/std/primitive.u8.html\">u8</a>]&gt; for <a class=\"struct\" href=\"tls/crypto/cipher/struct.AeadKey.html\" title=\"struct tls::crypto::cipher::AeadKey\">AeadKey</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/convert/trait.AsRef.html\" title=\"trait core::convert::AsRef\">AsRef</a>&lt;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.87.0/std/primitive.u8.html\">u8</a>]&gt; for <a class=\"struct\" href=\"tls/crypto/hash/struct.Output.html\" title=\"struct tls::crypto::hash::Output\">Output</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/convert/trait.AsRef.html\" title=\"trait core::convert::AsRef\">AsRef</a>&lt;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.87.0/std/primitive.u8.html\">u8</a>]&gt; for <a class=\"struct\" href=\"tls/crypto/hmac/struct.Tag.html\" title=\"struct tls::crypto::hmac::Tag\">Tag</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/convert/trait.AsRef.html\" title=\"trait core::convert::AsRef\">AsRef</a>&lt;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.87.0/std/primitive.u8.html\">u8</a>]&gt; for <a class=\"struct\" href=\"tls/message/hs/struct.Random.html\" title=\"struct tls::message::hs::Random\">Random</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1493]}

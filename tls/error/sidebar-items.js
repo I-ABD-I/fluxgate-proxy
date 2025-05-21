@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error","InvalidMessage","MessageError"],"fn":["inappropriate_message"],"struct":["GetRandomFailed"]};

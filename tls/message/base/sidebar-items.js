@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Payload"],"struct":["PayloadU16","PayloadU8"]};

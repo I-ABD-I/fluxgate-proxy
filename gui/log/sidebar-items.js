@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["LogsTab","update_log"],"struct":["LogsTabProps"]};

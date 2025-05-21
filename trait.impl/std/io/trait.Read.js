@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["tls",[["impl&lt;T&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> for <a class=\"struct\" href=\"tls/stream/struct.Stream.html\" title=\"struct tls::stream::Stream\">Stream</a>&lt;'_, T&gt;<div class=\"where\">where\n    T: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a>,</div>"],["impl&lt;T&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> for <a class=\"struct\" href=\"tls/stream/struct.StreamOwned.html\" title=\"struct tls::stream::StreamOwned\">StreamOwned</a>&lt;T&gt;<div class=\"where\">where\n    T: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a>,</div>"],["impl&lt;T: AsyncRead + <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a>&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.87.0/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> for <a class=\"struct\" href=\"tls/futures/utils/struct.ReadSyncConverter.html\" title=\"struct tls::futures::utils::ReadSyncConverter\">ReadSyncConverter</a>&lt;'_, '_, T&gt;"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1600]}

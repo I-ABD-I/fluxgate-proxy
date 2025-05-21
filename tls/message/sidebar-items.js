@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HEADER_SIZE","MAX_PAYLOAD","MAX_WIRE_SIZE"],"enum":["MessagePayload"],"mod":["alert","base","ccs","deframer","enums","fragmenter","hs","inbound","macros","outbound"],"struct":["Message","PlainMessage"]};

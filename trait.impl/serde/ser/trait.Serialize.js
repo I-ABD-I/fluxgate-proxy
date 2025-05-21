@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["fluxgate",[["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"enum\" href=\"fluxgate/config/enum.LoadBalancer.html\" title=\"enum fluxgate::config::LoadBalancer\">LoadBalancer</a>"],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"fluxgate/config/helper/struct.Server.html\" title=\"struct fluxgate::config::helper::Server\">Server</a>"],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"fluxgate/config/struct.SSLConfig.html\" title=\"struct fluxgate::config::SSLConfig\">SSLConfig</a>"],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"fluxgate/config/struct.Upstream.html\" title=\"struct fluxgate::config::Upstream\">Upstream</a>"]]],["gui",[["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"gui/db/struct.Server.html\" title=\"struct gui::db::Server\">Server</a>"],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"gui/db/struct.Stamp.html\" title=\"struct gui::db::Stamp\">Stamp</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1140,513]}
