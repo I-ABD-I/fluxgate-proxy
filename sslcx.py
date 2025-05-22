@@ -1,6 +1,9 @@
 import ssl
 import socket
 
+# This is a client that connects to a server using SSL
+# Used to test TLS impl
+
 cx = ssl.create_default_context()
 cx.check_hostname = False
 cx.verify_mode = ssl.CERT_NONE
